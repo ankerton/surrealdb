@@ -611,3 +611,32 @@ mem:///absolute/path?param=value # with persistence
 | `SURREAL_ROCKSDB_GROUPED_COMMIT_TIMEOUT` | `5ms` | Max time to wait for a batch to fill |
 | `SURREAL_ROCKSDB_GROUPED_COMMIT_WAIT_THRESHOLD` | `12` | Batch size that triggers wait |
 | `SURREAL_ROCKSDB_GROUPED_COMMIT_MAX_BATCH_SIZE` | `4096` | Hard ceiling on batch size |
+
+---
+
+## Credits
+
+SurrealDB was created and is maintained by [Tobie Morgan Hitchcock](https://github.com/tobiemh) and [Jaime Morgan Hitchcock](https://github.com/jaimemh), and developed by the SurrealDB engineering team. The full list of contributors is available at [github.com/surrealdb/surrealdb/graphs/contributors](https://github.com/surrealdb/surrealdb/graphs/contributors).
+
+This fork adds encryption at rest and point-in-time read capabilities on top of their work. All credit for the database engine, query language, and everything else goes to the original team.
+
+- **Upstream repository:** https://github.com/surrealdb/surrealdb
+- **SurrealDB website:** https://surrealdb.com
+- **Documentation:** https://surrealdb.com/docs
+
+---
+
+## License
+
+This software is licensed under the **Business Source License 1.1** (BUSL-1.1).
+
+- **Licensor:** SurrealDB Ltd.
+- **Licensed Work:** SurrealDB 3.0 — © 2025 SurrealDB Limited
+- **Change Date:** 2030-01-01
+- **Change License:** Apache License, Version 2.0
+
+On the Change Date, the license automatically converts to Apache 2.0 and the software becomes fully open source.
+
+**Additional Use Grant:** You may use this software freely, including in commercial applications, provided you do not use it as a **Database Service** — meaning a product or platform that exposes database functionality (schema or table management) to third parties outside your own organisation.
+
+The full license text is in the [`LICENSE`](LICENSE) file at the root of this repository.
