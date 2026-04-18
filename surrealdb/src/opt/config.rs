@@ -30,6 +30,10 @@ pub struct Config {
 	pub(crate) node_membership_check_interval: Option<Duration>,
 	pub(crate) node_membership_cleanup_interval: Option<Duration>,
 	pub(crate) changefeed_gc_interval: Option<Duration>,
+	/// AES-256-CTR encryption key for RocksDB at-rest encryption.
+	/// Only has effect when the engine is RocksDB. Never serialised or logged.
+	#[cfg(storage)]
+	pub(crate) encryption_key: Option<[u8; 32]>,
 }
 
 impl Config {
@@ -142,6 +146,15 @@ impl Config {
 	/// Set the interval at which the database should run node maintenance tasks
 	pub fn changefeed_gc_interval(mut self, interval: impl Into<Option<Duration>>) -> Self {
 		self.changefeed_gc_interval = interval.into().filter(|x| !x.is_zero());
+		self
+	}
+
+	/// Set a 32-byte AES-256 encryption key for RocksDB at-rest encryption.
+	/// The key is passed directly to the storage engine and is never included
+	/// in any connection string, log, or serialised configuration.
+	#[cfg(storage)]
+	pub fn with_encryption_key(mut self, key: [u8; 32]) -> Self {
+		self.encryption_key = Some(key);
 		self
 	}
 }

@@ -146,6 +146,13 @@ pub(crate) async fn run_router(
 
 	let builder = builder.with_capabilities(address.config.capabilities);
 
+	#[cfg(storage)]
+	let builder = if let Some(key) = address.config.encryption_key {
+		builder.with_encryption_key(key)
+	} else {
+		builder
+	};
+
 	let kvs = match builder.build_with_path(endpoint).await {
 		Ok(kvs) => {
 			if let Err(error) = kvs.check_version().await {

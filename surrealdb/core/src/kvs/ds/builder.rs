@@ -44,6 +44,8 @@ pub struct Builder {
 	authenticate: bool,
 	#[cfg(feature = "surrealism")]
 	lazy_surrealism: bool,
+	#[cfg(feature = "kv-rocksdb")]
+	encryption_key: Option<[u8; 32]>,
 }
 
 impl Default for Builder {
@@ -66,6 +68,8 @@ impl Builder {
 			authenticate: false,
 			#[cfg(feature = "surrealism")]
 			lazy_surrealism: false,
+			#[cfg(feature = "kv-rocksdb")]
+			encryption_key: None,
 		}
 	}
 
@@ -140,7 +144,20 @@ impl Builder {
 		self
 	}
 
+	/// Set a 32-byte AES-256-CTR encryption key for RocksDB at-rest encryption.
+	/// When set, all SST files, WAL files, and the MANIFEST are encrypted.
+	/// Only has effect when the path scheme is `rocksdb://`.
+	#[cfg(feature = "kv-rocksdb")]
+	pub fn with_encryption_key(mut self, key: [u8; 32]) -> Self {
+		self.encryption_key = Some(key);
+		self
+	}
+
 	pub async fn build_with_path(self, path: &str) -> Result<Datastore> {
+		#[cfg(feature = "kv-rocksdb")]
+		if let Some(key) = self.encryption_key {
+			return self.build_encrypted_rocksdb(path, key).await;
+		}
 		self.build_with_factory_path(path, CommunityComposer()).await
 	}
 
@@ -151,6 +168,47 @@ impl Builder {
 		let tx_builder = composer.new_transaction_builder(path, self.shutdown.clone()).await?;
 		let buckets = BucketsManager::new(Arc::new(composer));
 
+		self.build_with_tx_builder_buckets(tx_builder, buckets).await
+	}
+
+	/// Open a RocksDB datastore with an AES-256-CTR encryption key.
+	/// The key is injected directly into `RocksDbConfig` — it never appears in
+	/// any URL or log. All other config (versioned, sync_mode, retention_ns) is
+	/// parsed from the path query string as normal.
+	#[cfg(feature = "kv-rocksdb")]
+	async fn build_encrypted_rocksdb(self, path: &str, key: [u8; 32]) -> Result<Datastore> {
+		use crate::kvs::DatastoreFlavor;
+		use crate::kvs::config::{RocksDbConfig, parse_query_params};
+
+		// Split path and query string — mirrors what CommunityComposer does
+		let (raw_path, query_string) = match path.split_once('?') {
+			Some((p, q)) => (p, Some(q)),
+			None => (path, None),
+		};
+		let params = query_string.map(parse_query_params).unwrap_or_default();
+
+		// Extract the filesystem path after the scheme (rocksdb:/// or rocksdb://)
+		let rocksdb_path = raw_path
+			.split_once("://")
+			.or_else(|| raw_path.split_once(':'))
+			.map(|(_, p)| p)
+			.unwrap_or(raw_path);
+		let normalised = format!("/{}", rocksdb_path.trim_start_matches('/'));
+
+		// Build RocksDbConfig from query params, then inject the key
+		let mut config =
+			RocksDbConfig::from_params(&params).map_err(|e| anyhow::anyhow!(e))?;
+		config.encryption_key = Some(key);
+
+		// Initialise the blocking thread pool and open the encrypted store
+		super::super::threadpool::initialise();
+		let v = super::super::rocksdb::Datastore::new(&normalised, config)
+			.await
+			.map(DatastoreFlavor::RocksDB)?;
+
+		// Hand the pre-built storage to the standard builder finish path
+		let tx_builder = Box::<DatastoreFlavor>::new(v);
+		let buckets = BucketsManager::new(Arc::new(CommunityComposer()));
 		self.build_with_tx_builder_buckets(tx_builder, buckets).await
 	}
 
