@@ -1,485 +1,613 @@
-<a href="https://surrealdb.com#gh-dark-mode-only" target="_blank">
-    <img width="100%" src="/img/white/hero.png" alt="SurrealDB Hero">
-</a>
-<a href="https://surrealdb.com#gh-light-mode-only" target="_blank">
-    <img width="100%" src="/img/black/hero.png" alt="SurrealDB Hero">
-</a>
+# SurrealDB — Ankerton Fork
 
-<p align="center">
-    <a href="https://github.com/surrealdb/surrealdb"><img src="https://img.shields.io/github/v/release/surrealdb/surrealdb?color=ff00a0&include_prereleases&label=version&sort=semver&style=flat-square"></a>
-    &nbsp;
-    <a href="https://github.com/surrealdb/surrealdb"><img src="https://img.shields.io/badge/built_with-Rust-dca282.svg?style=flat-square"></a>
-    &nbsp;
-	<a href="https://github.com/surrealdb/surrealdb/actions"><img src="https://img.shields.io/github/actions/workflow/status/surrealdb/surrealdb/ci.yml?style=flat-square&branch=main"></a>
-    &nbsp;
-    <a href="https://github.com/surrealdb/license"><img src="https://img.shields.io/badge/license-BSL_1.1-00bfff.svg?style=flat-square"></a>
-</p>
+**GitHub:** https://github.com/ankerton/surrealdb
 
-<p align="center">
-    <a href="https://hub.docker.com/repository/docker/surrealdb/surrealdb"><img src="https://img.shields.io/docker/pulls/surrealdb/surrealdb?label=docker%20pulls&style=flat-square"></a>
-    &nbsp;
-    <a href="https://crates.io/crates/surrealdb"><img src="https://img.shields.io/crates/d/surrealdb?color=dca282&label=rust&style=flat-square"></a>
-	&nbsp;
-    <a href="https://www.npmjs.com/package/surrealdb.js"><img src="https://img.shields.io/npm/dt/surrealdb.js?color=f7df1e&label=javascript&style=flat-square"></a>
-    &nbsp;
-	<a href="https://pypi.org/project/surrealdb/"><img src="https://img.shields.io/pepy/dt/surrealdb?color=426c99&label=python&style=flat-square"></a>
-	&nbsp;
-	<a href="https://www.nuget.org/packages/SurrealDb.Net"><img src="https://img.shields.io/nuget/dt/surrealdb.net?color=4c2dcc&label=.NET&style=flat-square"></a>
-	&nbsp;
-	<a href="https://packagist.org/packages/surrealdb/surrealdb.php"><img src="https://img.shields.io/packagist/dt/surrealdb/surrealdb.php?color=4d588b&label=php&style=flat-square"></a>
-    &nbsp;
-	<a href="https://hub.docker.com/repository/docker/surrealdb/surrealdb"><img src="https://img.shields.io/github/downloads/surrealdb/surrealdb/total?color=8259dd&label=github%20downloads&style=flat-square"></a>
-</p>
+This is the Ankerton fork of SurrealDB. It adds two capabilities to the **RocksDB storage engine** that are not available anywhere in upstream SurrealDB — not on RocksDB, not on SurrealKV, not on any other backend:
 
-<p align="center">
-	<a href="https://surrealdb.com/discord"><img src="https://img.shields.io/discord/902568124350599239?label=discord&style=flat-square&color=5a66f6" alt="Discord"></a>
-	&nbsp;
-    <a href="https://x.com/surrealdb"><img src="https://img.shields.io/badge/x-follow_us-222222.svg?style=flat-square" alt="X"></a>
-    &nbsp;
-    <a href="https://dev.to/surrealdb"><img src="https://img.shields.io/badge/dev-join_us-86f7b7.svg?style=flat-square" alt="Dev"></a>
-    &nbsp;
-    <a href="https://www.linkedin.com/company/surrealdb/"><img src="https://img.shields.io/badge/linkedin-connect_with_us-0a66c2.svg?style=flat-square" alt="LinkedIn"></a>
-	&nbsp;
-    <a href="https://www.youtube.com/@surrealdb"><img src="https://img.shields.io/badge/youtube-subscribe-fc1c1c.svg?style=flat-square" alt="YouTube"></a>
-</p>
+- **Encryption at rest** — all data on disk is AES-256-CTR encrypted. Files are unreadable without the key. **This is only available with RocksDB.** SurrealKV and the in-memory engine do not support encryption at rest.
+- **Point-in-time reads** — every write is timestamped with a Hybrid Logical Clock. You can query the database as it existed at any past moment. Available on both RocksDB (this fork) and SurrealKV.
 
-<p align="center">
-	<a href="https://surrealdb.com/blog"><img height="25" src="./img/social/blog.svg" alt="Blog"></a>
-	&nbsp;
-	<a href="https://github.com/surrealdb/surrealdb"><img height="25" src="./img/social/github.svg" alt="Github"></a>
-	&nbsp;
-    <a href="https://www.linkedin.com/company/surrealdb/"><img height="25" src="./img/social/linkedin.svg" alt="LinkedIn"></a>
-    &nbsp;
-    <a href="https://x.com/surrealdb"><img height="25" src="./img/social/x.svg" alt="X"></a>
-    &nbsp;
-    <a href="https://www.youtube.com/@surrealdb"><img height="25" src="./img/social/youtube.svg" alt="YouTube"></a>
-    &nbsp;
-    <a href="https://dev.to/surrealdb"><img height="25" src="./img/social/dev.svg" alt="Dev"></a>
-    &nbsp;
-    <a href="https://surrealdb.com/discord"><img height="25" src="./img/social/discord.svg" alt="Discord"></a>
-    &nbsp;
-    <a href="https://stackoverflow.com/questions/tagged/surrealdb"><img height="25" src="./img/social/stack-overflow.svg" alt="Stack Overflow"></a>
-</p>
+If your application stores sensitive data and requires data-at-rest protection, RocksDB with encryption enabled is the only storage engine in this fork that provides it.
 
-<br>
+Everything else — SurrealQL, graph traversal, vector search, full-text search, multi-tenancy, live queries, the server, the Rust SDK — is unchanged from upstream SurrealDB.
 
-<h2><img height="20" src="./img/whatissurreal.svg">&nbsp;&nbsp;What is SurrealDB?</h2>
+---
 
-SurrealDB is a multi-model database built in Rust designed to unify multiple data models into a single engine. SurrealDB combines document, graph, relational, time-series, geospatial and key-value data types with powerful search and retrieval functionalities (full-text, vector, hybrid) and real-time and event-driven capabilities, enabling developers to build powerful applications faster and more efficiently. SurrealDB can also be used as a backend-as-a-service given its support for end user authentication. Given that it’s a single Rust binary, SurrealDB can run embedded (in‐app), in the browser (via WebAssembly), in the edge, self-hosted as single backend node, or in a distributed cluster in the cloud.
+## Table of Contents
 
-SurrealDB is used for data-intensive systems such as applications requiring multiple data types, data layer for AI agents, knowledge graphs, real-time apps (e.g. recommendation engines, fraud detection systems) and embedded/edge systems. With SurrealDB, you can simplify your database and API infrastructure, reduce development time, and build secure, performant apps quickly and cost-effectively.
+1. [What SurrealDB can do](#what-surrealdb-can-do)
+2. [Installation](#installation)
+3. [Connecting to the database](#connecting-to-the-database)
+   - [Embedded (inside your application)](#embedded-inside-your-application)
+   - [Remote server](#remote-server)
+4. [Querying with SurrealQL](#querying-with-surrealql)
+   - [Basic CRUD](#basic-crud)
+   - [Graph traversal](#graph-traversal)
+   - [Vector similarity search](#vector-similarity-search)
+   - [Full-text search](#full-text-search)
+   - [Geospatial queries](#geospatial-queries)
+   - [Live queries](#live-queries)
+5. [Encryption at rest](#encryption-at-rest)
+6. [Point-in-time reads](#point-in-time-reads)
+7. [Durability and sync modes](#durability-and-sync-modes)
+8. [Connection string reference](#connection-string-reference)
+9. [Environment variables](#environment-variables)
 
-**Key features of SurrealDB include:**
+---
 
-- **Reduces development time**: SurrealDB simplifies your database and API stack by removing the need for most server-side components, allowing you to build secure, performant apps faster and cheaper.
-- **Multi-model**: native multi-model support for document, graph, relational (enforcing schema and schemaless), time-series, geospatial and retrieval (full-text, vector, hybrid). This is offered natively through SurrealQL, SurrealDB's SQL-like intuitive query language.
-- **Real-time collaborative API backend service:** SurrealDB functions as both a database and an API backend service, enabling real-time collaboration.
-- **Support for multiple querying languages:** SurrealDB supports SQL querying from client devices, GraphQL, ACID transactions, WebSocket connections, structured and unstructured data, graph querying, full-text and vector indexing, and geospatial querying.
-- **Granular access control**: SurrealDB provides row-level permissions-based access control, giving you the ability to manage data access with precision.
+## What SurrealDB can do
 
-View the [features](https://surrealdb.com/features), the latest [releases](https://surrealdb.com/releases), and [documentation](https://surrealdb.com/docs).
+SurrealDB is a single database that covers workloads that normally require several specialised systems:
 
-<img width="100%" src="./img/interface.png" alt="Surrealist">
+| Capability | How |
+|---|---|
+| Relational queries | SurrealQL — a SQL superset with JOINs, aggregations, subqueries |
+| Document storage | Schemaless or schema-enforced records with nested objects and arrays |
+| Graph traversal | First-class edge records; `->` / `<-` syntax for multi-hop traversal |
+| Vector search | HNSW indexes; approximate nearest-neighbour queries in SurrealQL |
+| Full-text search | BM25-ranked `SEARCH` indexes with highlighting |
+| Geospatial queries | Point, line, polygon types; distance and containment predicates |
+| Time-series | Time-ordered record IDs; range queries over time |
+| Multi-tenancy | Namespaces and databases; row-level permissions |
+| Real-time | Live queries push change notifications over WebSocket |
+| Transactions | ACID across all tables and record types |
+| Auth | Built-in user/role management; JWT-compatible access tokens |
 
-<h2><img height="20" src="./img/contents.svg">&nbsp;&nbsp;Contents</h2>
+---
 
-- [Features](#features)
-- [Documentation](#documentation)
-- [Getting started](#getting-started)
-	- [Server side code](#server-side-code)
-	- [Client side apps](#client-side-apps)
-- [SurrealDB Cloud](#surrealdb-cloud)
-- [Installation](#installation)
-	- [Install on macOS](#install-on-macos)
-	- [Install on Linux](#install-on-linux)
-	- [Install on Windows](#install-on-windows)
-	- [Run using Docker](#run-using-docker)
-- [Quick look](#quick-look)
-- [Why SurrealDB](#why-surrealdb)
-	- [Database, API, and permissions](#database-api-and-permissions)
-	- [Tables, documents, and graph](#tables-documents-and-graph)
-	- [Advanced inter-document relations](#advanced-inter-document-relations-and-analysis-no-joins-no-pain)
-	- [Simple schema definition](#simple-schema-definition-for-frontend-and-backend-development)
-	- [Connect directly from web-browsers](#connect-and-query-directly-from-web-browsers-and-client-devices)
-	- [Multiple different query methods](#query-the-database-with-the-tools-you-want)
-	- [Realtime live queries and data changes](#realtime-live-queries-and-data-changes-direct-to-application)
-	- [Scale effortlessly for high-availability](#scale-effortlessly-to-hundreds-of-nodes-for-high-availability-and-scalability)
-	- [Extend your database with JavaScript](#extend-your-database-with-javascript-functions)
-	- [Designed to be embedded or in the cloud](#designed-to-be-embedded-or-to-run-distributed-in-the-cloud)
-- [Community](#community)
-- [Contributing](#contributing)
-- [Security](#security)
-- [License](#license)
+## Installation
 
-<h2><img height="20" src="./img/features.svg">&nbsp;&nbsp;Features</h2>
+Add to `Cargo.toml`:
 
-- [x] Database server, or embedded library
-- [x] Multi-row, multi-table ACID transactions
-- [x] Single-node, or highly-scalable distributed mode
-- [x] Record links and directed typed graph connections
-- [x] Store structured and unstructured data
-- [x] Incrementally computed views for pre-computed advanced analytics
-- [x] Realtime-API layer, and security permissions built in
-- [x] Store and model data in any way with tables, documents, and graph
-- [x] Simple schema definition for frontend and backend development
-- [x] Connect and query directly from web-browsers and client devices
-- [x] Use embedded JavaScript functions for custom advanced functionality
-
-<h2><img height="20" src="./img/documentation.svg">&nbsp;&nbsp;Documentation</h2>
-
-For guidance on installation, development, deployment, and administration, take a look at the following resources:
-
-- Documentation: https://surrealdb.com/docs
-- SurrealDB University: https://surrealdb.com/learn
-- Aeon's Surreal Renaissance (interactive book): https://surrealdb.com/learn/book
-
-<h2><img height="20" src="./img/gettingstarted.svg">&nbsp;&nbsp;Getting started</h2>
-
-Getting started with SurrealDB is as easy as starting up the SurrealDB database server, choosing your platform, and integrating its SDK into your code. You can easily get started with your platform of choice by reading one of our tutorials.
-
-**Server side code**
-
-<p>
-    <a href="https://surrealdb.com/docs/integration/sdks/rust"><img width=60 title="Rust" src="https://raw.githubusercontent.com/surrealdb/icons/main/rust.svg" /></a>
-    &nbsp;
-    <a href="https://surrealdb.com/docs/integration/sdks/javascript"><img width=60 title="JavaScript" src="https://raw.githubusercontent.com/surrealdb/icons/main/javascript.svg" /></a>
-	&nbsp;
-    <a href="https://surrealdb.com/docs/sdk/javascript/engines/wasm"><img width=60 title="WebAssembly" src="https://raw.githubusercontent.com/surrealdb/icons/main/webassembly.svg" /></a>
-	&nbsp;
-    <a href="https://surrealdb.com/docs/sdk/javascript/engines/node"><img width=60 title="Node.js" src="https://raw.githubusercontent.com/surrealdb/icons/main/nodejs.svg" /></a>
-	&nbsp;
-    <a href="https://surrealdb.com/docs/integration/sdks/javascript"><img width=60 title="Deno" src="https://raw.githubusercontent.com/surrealdb/icons/main/deno.svg" /></a>
-	&nbsp;
-	<a href="https://surrealdb.com/docs/integration/sdks/python"><img width=60 title="Python" src="https://raw.githubusercontent.com/surrealdb/icons/main/python.svg" /></a>
-	&nbsp;
-    <a href="https://surrealdb.com/docs/integration/sdks/golang"><img width=60 title="Golang" src="https://raw.githubusercontent.com/surrealdb/icons/main/golang.svg" /></a>
-	&nbsp;
-    <a href="https://surrealdb.com/docs/integration/sdks/dotnet"><img width=60 title=".NET" src="https://raw.githubusercontent.com/surrealdb/icons/main/dotnet.svg" /></a>
-	&nbsp;
-    <a href="https://surrealdb.com/docs/integration/sdks/php"><img width=60 title="PHP" src="https://raw.githubusercontent.com/surrealdb/icons/main/php.svg" /></a>
-	&nbsp;
-    <a href="https://surrealdb.com/docs/integration/sdks/java"><img width=60 title="Java" src="https://raw.githubusercontent.com/surrealdb/icons/main/java.svg" /></a>
-</p>
-
-**Client side apps**
-
-<p>
-	<a href="https://surrealdb.com/docs/integration/sdks/javascript"><img width=60 title="JavaScript" src="https://raw.githubusercontent.com/surrealdb/icons/main/javascript.svg" /></a>
-    &nbsp;
-    <a href="https://surrealdb.com/docs/sdk/javascript/engines/wasm"><img width=60 title="WebAssembly" src="https://raw.githubusercontent.com/surrealdb/icons/main/webassembly.svg" /></a>
-	&nbsp;
-    <a href="https://surrealdb.com/docs/integration/sdks/javascript"><img width=60 title="React" src="https://raw.githubusercontent.com/surrealdb/icons/main/reactjs.svg" /></a>
-	&nbsp;
-    <a href="https://surrealdb.com/docs/integration/sdks/javascript"><img width=60 title="Next.js" src="https://raw.githubusercontent.com/surrealdb/icons/main/nextjs.svg" /></a>
-	&nbsp;
-    <a href="https://surrealdb.com/docs/integration/sdks/ember"><img width=60 title="Ember.js" src="https://raw.githubusercontent.com/surrealdb/icons/main/emberjs.svg" /></a>
-</p>
-
-<h2><img height="20" src="/img/cloud.svg?raw=true">&nbsp;&nbsp;SurrealDB Cloud</h2>
-
-<a href="https://surrealdb.com/cloud#gh-dark-mode-only" target="_blank">
-    <img width="100%" src="/img/white/cloud.png" alt="SurrealDB Cloud">
-</a>
-<a href="https://surrealdb.com/cloud#gh-light-mode-only" target="_blank">
-    <img width="100%" src="/img/black/cloud.png" alt="SurrealDB Cloud">
-</a>
-
-SurrealDB is available as a [managed cloud service](https://app.surrealdb.com/overview). Forget about infrastructure operations, monitoring, backups or capacity planning. [SurrealDB Cloud](https://surrealdb.com/cloud) allows you to focus on building great products using the power and flexibility of SurrealDB in just a few clicks. Grow from prototype to enterprise-scale. The SurrealDB Cloud scalable architecture allows your database to evolve as your application grows, ensuring you are always ahead of demand. However if you want to deploy SurrealDB yourself, keep reading below.
-
-<h2><img height="20" src="./img/installation.svg">&nbsp;&nbsp;Installation</h2>
-
-SurrealDB is designed to be simple to install and simple to run - using just one command from your terminal. In addition to traditional installation, SurrealDB can be installed and run with HomeBrew, Docker, or using any other container orchestration tool such as Docker Compose, Docker Swarm, Rancher, or in Kubernetes.
-
-<h4><a href="https://surrealdb.com/install"><img width="20" src="./img/apple.svg"></a>&nbsp;Install on macOS</h4>
-
-The quickest way to get going with SurrealDB on macOS is to use Homebrew. This will install both the command-line tools, and the SurrealDB server as a single executable. If you don't use Homebrew, follow the instructions for Linux below to install SurrealDB.
-
-```bash
-brew install surrealdb/tap/surreal
+```toml
+[dependencies]
+surrealdb = { path = "../surrealdb", features = ["storage-rocksdb"] }
+tokio    = { version = "1", features = ["rt-multi-thread", "macros"] }
+serde    = { version = "1", features = ["derive"] }
 ```
 
-If you want to test a version with the latest features, published every night, install the `nightly` version:
+For production embedded use, also enable the allocator:
 
-```bash
-brew install surrealdb/tap/surreal-nightly
+```toml
+surrealdb = { path = "../surrealdb", features = ["allocator", "storage-rocksdb"] }
 ```
 
-<h4><a href="https://surrealdb.com/install"><img width="20" src="./img/linux.svg"></a>&nbsp;Install on Linux</h4>
+Available storage features:
 
-The easiest and preferred way to get going with SurrealDB on Unix operating systems is to install and use the SurrealDB command-line tool. Run the following command in your terminal and follow the on-screen instructions.
+| Feature | Storage | Encryption at rest | Point-in-time reads |
+|---|---|---|---|
+| `storage-rocksdb` | RocksDB — persistent, recommended for production | **yes (this fork only)** | yes |
+| `storage-surrealkv` | SurrealKV — persistent, lighter weight | **no** | yes |
+| `storage-mem` | In-memory — no persistence, useful for tests | **no** | optional |
 
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://install.surrealdb.com | sh
-```
+> **Only RocksDB supports encryption at rest.** If your deployment requires data-at-rest encryption, you must use `storage-rocksdb`.
 
-If you want to run a beta release, before the next version is released, the `beta` version:
+Configure the Tokio runtime for embedded use — embedded SurrealDB benefits from multiple threads and a larger stack:
 
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://install.surrealdb.com | sh -s -- --beta
-```
-
-If you want to test a version with the latest features, published every night, install the `nightly` version:
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://install.surrealdb.com | sh -s -- --nightly
-```
-
-<h4><a href="https://surrealdb.com/install"><img width="20" src="./img/windows.svg"></a>&nbsp;Install on Windows</h4>
-
-The easiest and preferred way to get going with SurrealDB on Windows is to install and use the SurrealDB command-line tool. Run the following command in your terminal and follow the on-screen instructions.
-
-```ps1
-iwr https://windows.surrealdb.com -useb | iex
-```
-
-If you want to test a version with the latest features, published every night, install the `nightly` version:
-
-```ps1
-iex "& { $(irm https://windows.surrealdb.com) } -Nightly"
-```
-
-<h4><a href="https://surrealdb.com/install"><img width="20" src="./img/docker.svg"></a>&nbsp;Run using Docker</h4>
-
-Docker can be used to manage and run SurrealDB database instances without the need to install any command-line tools. The SurrealDB docker container contains the full command-line tools for importing and exporting data from a running server, or for running a server itself.
-
-```bash
-docker run --rm --pull always --name surrealdb -p 8000:8000 surrealdb/surrealdb:latest start
-```
-
-For just getting started with a development server running in memory, you can pass the container a basic initialization to set the user and password as root and enable logging.
-
-```bash
-docker run --rm --pull always --name surrealdb -p 8000:8000 surrealdb/surrealdb:latest start --log info --user root --pass root memory
-``` 
-
-<h2><img height="20" src="./img/features.svg">&nbsp;&nbsp;Quick look</h2>
-
-With strongly-typed data types, data can be fully modelled right in the database.
-
-```surrealql
-UPDATE person SET
-    waist = <int> "34",
-    height = <float> 201,
-    score = <decimal> 0.3 + 0.3 + 0.3 + 0.1
-;
-```
-
-Store dynamically computed fields which are calculated when retrieved.
-
-```surrealql
-DEFINE FIELD can_drive ON TABLE person COMPUTED time::now() > birthday + 18y;
-CREATE person SET birthday = d"2007-06-22";
-;
-```
-
-Easily work with unstructured or structured data, in schema-less or schema-full mode.
-
-```surrealql
--- Create a schemafull table
-DEFINE TABLE user SCHEMAFULL;
-
--- Specify fields on the user table
-DEFINE FIELD name ON TABLE user TYPE object;
-DEFINE FIELD name.first ON TABLE user TYPE string;
-DEFINE FIELD name.last ON TABLE user TYPE string;
-DEFINE FIELD email ON TABLE user TYPE string ASSERT string::is_email($value);
-
--- Add a unique index on the email field preventing duplicate values
-DEFINE INDEX email ON TABLE user COLUMNS email UNIQUE;
-
--- Create a new event whenever a user changes their email address
-DEFINE EVENT email ON TABLE user WHEN $before.email != $after.email THEN (
-    CREATE event SET user = $value, time = time::now(), value = $after.email, action = 'email_changed'
-);
-```
-
-Connect records together with fully directed graph edge connections.
-
-```surrealql
--- Add a graph edge between user:tobie and article:surreal
-RELATE user:tobie->write->article:surreal
-    SET time.written = time::now()
-;
-
--- Add a graph edge between specific users and developers
-LET $from = (SELECT users FROM company:surrealdb);
-LET $devs = (SELECT * FROM user WHERE tags CONTAINS 'developer');
-RELATE $from->like->$devs UNIQUE
-    SET time.connected = time::now()
-;
-```
-
-Query data flexibly with advanced expressions and graph queries.
-
-```surrealql
--- Select a nested array, and filter based on an attribute
-SELECT emails[WHERE active = true] FROM person;
-
--- Select all 1st, 2nd, and 3rd level people who this specific person record knows, or likes, as separate outputs
-SELECT ->knows->(? AS f1)->knows->(? AS f2)->(knows, likes AS e3 WHERE influencer = true)->(? AS f3) FROM person:tobie;
-
--- Select all person records (and their recipients), who have sent more than 5 emails
-SELECT *, ->sent->email->to->person FROM person WHERE count(->sent->email) > 5;
-
--- Select other products purchased by people who purchased this laptop
-SELECT <-purchased<-person->purchased->product FROM product:laptop;
-
--- Select products purchased by people in the last 3 weeks who have purchased the same products that we purchased
-SELECT ->purchased->product<-purchased<-person->(purchased WHERE created_at > time::now() - 3w)->product FROM person:tobie;
-```
-
-Store GeoJSON geographical data types, including points, lines and polygons.
-
-```surrealql
-UPDATE city:london SET
-    centre = (-0.118092, 51.509865),
-    boundary = {
-        type: "Polygon",
-        coordinates: [[
-            [-0.38314819, 51.37692386], [0.1785278, 51.37692386],
-            [0.1785278, 51.61460570], [-0.38314819, 51.61460570],
-            [-0.38314819, 51.37692386]
-        ]]
-    }
-;
-```
-
-Write custom embedded logic using JavaScript functions.
-
-```surrealql
-CREATE film SET
-    ratings = [
-        { rating: 6, user: user:bt8e39uh1ouhfm8ko8s0 },
-        { rating: 8, user: user:bsilfhu88j04rgs0ga70 },
-    ],
-    featured = function() {
-        return this.ratings.filter(r => {
-            return r.rating >= 7;
-        }).map(r => {
-            return { ...r, rating: r.rating * 10 };
+```rust
+fn main() {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_stack_size(10 * 1024 * 1024) // 10 MiB
+        .build()
+        .unwrap()
+        .block_on(async {
+            run().await.unwrap();
         });
+}
+```
+
+---
+
+## Connecting to the database
+
+### Embedded (inside your application)
+
+The database runs in the same process as your application. No separate server process is needed.
+
+```rust
+use surrealdb::Surreal;
+use surrealdb::engine::local::RocksDb;
+
+let db = Surreal::new::<RocksDb>("path/to/db").await?;
+
+// Every connection must select a namespace and database before querying.
+db.use_ns("myapp").use_db("production").await?;
+```
+
+Other embedded engines:
+
+```rust
+use surrealdb::engine::local::SurrealKv;
+use surrealdb::engine::local::Mem;
+
+// SurrealKV
+let db = Surreal::new::<SurrealKv>("path/to/db").await?;
+
+// Pure in-memory (data is lost on drop)
+let db = Surreal::new::<Mem>(()).await?;
+```
+
+Choose the engine at runtime:
+
+```rust
+use surrealdb::engine::any::connect;
+
+let db = connect("rocksdb:///path/to/db").await?;
+let db = connect("surrealkv:///path/to/db").await?;
+let db = connect("mem://").await?;
+```
+
+### Remote server
+
+Start the server:
+
+```bash
+surreal start --log info --user root --pass root rocksdb:///data
+```
+
+Connect:
+
+```rust
+use surrealdb::Surreal;
+use surrealdb::engine::remote::ws::Ws;
+use surrealdb::opt::auth::Root;
+
+let db = Surreal::new::<Ws>("127.0.0.1:8000").await?;
+
+db.signin(Root { username: "root", password: "root" }).await?;
+db.use_ns("myapp").use_db("production").await?;
+```
+
+With TLS:
+
+```rust
+use surrealdb::engine::remote::ws::Wss;
+
+let db = Surreal::new::<Wss>("db.example.com:443").await?;
+```
+
+Via HTTP instead of WebSocket:
+
+```rust
+use surrealdb::engine::remote::http::{Http, Https};
+
+let db = Surreal::new::<Http>("127.0.0.1:8000").await?;
+let db = Surreal::new::<Https>("db.example.com").await?;
+```
+
+---
+
+## Querying with SurrealQL
+
+### Basic CRUD
+
+```rust
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Person {
+    name: String,
+    age:  u32,
+}
+
+// Create — random ID
+let alice: Option<Person> = db
+    .create("person")
+    .content(Person { name: "Alice".into(), age: 30 })
+    .await?;
+
+// Create — specific ID
+let bob: Option<Person> = db
+    .create(("person", "bob"))
+    .content(Person { name: "Bob".into(), age: 25 })
+    .await?;
+
+// Read one
+let alice: Option<Person> = db.select(("person", "alice")).await?;
+
+// Read all
+let everyone: Vec<Person> = db.select("person").await?;
+
+// Update (merge — only the supplied fields are changed)
+let updated: Option<Person> = db
+    .update(("person", "bob"))
+    .merge(serde_json::json!({ "age": 26 }))
+    .await?;
+
+// Replace (full document replace)
+let replaced: Option<Person> = db
+    .update(("person", "bob"))
+    .content(Person { name: "Bob".into(), age: 26 })
+    .await?;
+
+// Delete
+let _: Option<Person> = db.delete(("person", "bob")).await?;
+
+// SurrealQL query with bound parameters
+let results = db
+    .query("SELECT * FROM person WHERE age > $min ORDER BY age ASC")
+    .bind(("min", 18))
+    .await?;
+
+let people: Vec<Person> = results.take(0)?;
+```
+
+### Graph traversal
+
+SurrealDB stores graph edges as records. Traverse them with `->` (outbound) and `<-` (inbound):
+
+```rust
+// Create nodes
+db.query("CREATE user:alice SET name = 'Alice'").await?;
+db.query("CREATE user:bob   SET name = 'Bob'").await?;
+db.query("CREATE user:carol SET name = 'Carol'").await?;
+
+// Create edges
+db.query("RELATE user:alice ->follows-> user:bob").await?;
+db.query("RELATE user:bob   ->follows-> user:carol").await?;
+
+// Who does Alice follow?
+let following = db
+    .query("SELECT ->follows->user.name AS following FROM user:alice")
+    .await?;
+
+// Who follows Carol (reverse traversal)?
+let followers = db
+    .query("SELECT <-follows<-user.name AS followers FROM user:carol")
+    .await?;
+
+// Two-hop: people Alice follows who also follow Carol
+let mutual = db
+    .query("SELECT ->follows->user->follows->user.name AS names FROM user:alice")
+    .await?;
+```
+
+Edges can carry their own data:
+
+```rust
+db.query(r#"
+    RELATE user:alice ->knows-> user:bob
+    SET since = time::now(), strength = 0.9
+"#).await?;
+
+// Query edge properties
+db.query(r#"
+    SELECT ->(knows WHERE strength > 0.5)->user.name AS close_friends
+    FROM user:alice
+"#).await?;
+```
+
+### Vector similarity search
+
+Define a vector index on a field, then query by cosine or Euclidean distance:
+
+```sql
+-- Define a table with a vector field and an HNSW index
+DEFINE TABLE article SCHEMALESS;
+DEFINE FIELD embedding ON article TYPE array<float>;
+DEFINE INDEX article_embedding ON article
+    FIELDS embedding
+    HNSW DIMENSION 1536 DIST COSINE;
+```
+
+```rust
+// Insert a document with an embedding
+db.query(r#"
+    CREATE article SET
+        title     = 'Introduction to Rust',
+        embedding = $vec
+"#)
+.bind(("vec", my_embedding_vector))
+.await?;
+
+// Find the 5 nearest neighbours to a query vector
+let results = db
+    .query(r#"
+        SELECT title, vector::similarity::cosine(embedding, $query) AS score
+        FROM article
+        WHERE embedding <|5,40|> $query
+        ORDER BY score DESC
+    "#)
+    .bind(("query", query_vector))
+    .await?;
+```
+
+The `<|k,ef|>` operator performs approximate nearest-neighbour search: `k` = number of results, `ef` = search beam width (higher = more accurate, slower).
+
+### Full-text search
+
+```sql
+-- Define a full-text index
+DEFINE INDEX article_title ON article
+    FIELDS title
+    SEARCH ANALYZER ascii BM25 HIGHLIGHTS;
+```
+
+```rust
+let results = db
+    .query(r#"
+        SELECT title, search::highlight('<b>', '</b>', 1) AS highlighted
+        FROM article
+        WHERE title @1@ 'rust programming'
+        ORDER BY search::score(1) DESC
+        LIMIT 10
+    "#)
+    .await?;
+```
+
+`@1@` is the match operator — the number identifies which index to score against, useful when querying multiple indexed fields.
+
+### Geospatial queries
+
+SurrealDB natively handles GeoJSON-compatible types:
+
+```rust
+db.query(r#"
+    CREATE city:london SET
+        name     = 'London',
+        location = (-0.1276, 51.5074)
+"#).await?;
+
+// Find cities within 100 km of a point
+let nearby = db
+    .query(r#"
+        SELECT name
+        FROM city
+        WHERE geo::distance(location, (-0.1276, 51.5074)) < 100000
+    "#)
+    .await?;
+
+// Containment: records whose location falls inside a polygon
+let inside = db
+    .query(r#"
+        SELECT name FROM city
+        WHERE geo::contains($area, location)
+    "#)
+    .bind(("area", geojson_polygon))
+    .await?;
+```
+
+### Live queries
+
+Live queries push change notifications to your application over the WebSocket connection whenever matching records are created, updated, or deleted:
+
+```rust
+use surrealdb::Action;
+
+// Subscribe to all changes on the person table
+let mut stream = db.select("person").live().await?;
+
+// Subscribe to changes matching a condition
+let mut stream = db
+    .query("LIVE SELECT * FROM person WHERE age > 18")
+    .await?
+    .stream::<surrealdb::Notification<Person>>(0)?;
+
+// Process notifications
+while let Some(notification) = stream.next().await {
+    let notification = notification?;
+    match notification.action {
+        Action::Create => println!("created: {:?}", notification.data),
+        Action::Update => println!("updated: {:?}", notification.data),
+        Action::Delete => println!("deleted: {:?}", notification.data),
+        _ => {}
     }
-;
+}
 ```
 
-Specify granular access permissions for client and application access.
+---
 
-```surrealql
--- Specify access permissions for the 'post' table
-DEFINE TABLE post SCHEMALESS
-    PERMISSIONS
-        FOR select
-            -- Published posts can be selected
-            WHERE published = true
-            -- A user can select all their own posts
-            OR user = $auth.id
-        FOR create, update
-            -- A user can create or update their own posts
-            WHERE user = $auth.id
-        FOR delete
-            -- A user can delete their own posts
-            WHERE user = $auth.id
-            -- Or an admin can delete any posts
-            OR $auth.admin = true
-;
+## Encryption at rest
+
+> This is an Ankerton fork addition. Upstream SurrealDB does not support encryption at rest.
+
+When encryption is enabled, every byte written to disk — SST files, write-ahead log, manifest — is encrypted with AES-256-CTR. The files cannot be read without the correct key.
+
+**The encryption key cannot be passed through a connection string.** It must be injected programmatically at startup. This requires working directly with the `Datastore` API from `surrealdb-core`:
+
+```toml
+[dependencies]
+surrealdb-core = { path = "../surrealdb/core", features = ["kv-rocksdb"] }
 ```
 
-<h2><img height="20" src="./img/features.svg">&nbsp;&nbsp;Why SurrealDB?</h2>
+```rust
+use surrealdb_core::kvs::rocksdb::Datastore;
+use surrealdb_core::kvs::config::{RocksDbConfig, SyncMode};
+use surrealdb_core::kvs::api::Transactable;
 
-<p>
-	<img width="49%" src="./img/illustrations/database-api-security.jpg" />
-	<img width="49%" src="./img/illustrations/multimodel-database.jpg" />
-</p>
+// Load your key from a KMS, HSM, or secure vault — never hardcode it.
+let key: [u8; 32] = load_key_from_vault();
 
-### Database, API, and permissions
+let config = RocksDbConfig {
+    encryption_key: Some(key), // AES-256-CTR; key is zeroed in memory after handoff
+    versioned:      true,      // enable point-in-time reads (see below)
+    sync_mode:      SyncMode::Every,
+    retention_ns:   0,         // keep all versions forever
+};
 
-SurrealDB combines the database layer, the querying layer, and the API and authentication layer into one platform. Advanced table-based and row-based customisable access permissions allow for granular data access patterns for different types of users. There's no need for custom backend code and security rules with complicated database development.
+let ds = Datastore::new("path/to/db", config).await?;
 
-### Tables, documents, and graph
+// Write
+let tx = ds.transaction(true, true).await?;
+tx.set(b"hello".to_vec(), b"world".to_vec()).await?;
+tx.commit().await?;
 
-As a multi-model database, SurrealDB enables developers to use multiple techniques to store and model data, without having to choose a method in advance. With the use of tables, SurrealDB has similarities with relational databases, but with the added functionality and flexibility of advanced nested fields and arrays. Inter-document record links allow for simple to understand and highly-performant related queries without the use of JOINs, eliminating the N+1 query problem.
+// Read
+let tx = ds.transaction(false, false).await?;
+let val = tx.get(b"hello".to_vec(), None).await?;
+tx.cancel().await?;
+```
 
-<p>
-	<img width="49%" src="./img/illustrations/graph-database.jpg" />
-	<img width="49%" src="./img/illustrations/schema-direct-to-client.jpg" />
-</p>
+**Key management notes:**
+- Use a 32-byte (256-bit) key. The `[u8; 32]` type enforces this at compile time.
+- The key is zeroed in Rust memory immediately after it is passed to C++.
+- Load the key from a hardware security module (HSM) or cloud KMS (AWS KMS, GCP Cloud KMS, HashiCorp Vault). Never derive it from a password without a proper KDF (e.g. Argon2).
+- Key rotation requires copying all data to a new database opened with the new key.
+- Encryption provides confidentiality of data at rest. It does not protect against a compromised process that has the key loaded in memory.
 
-### Advanced inter-document relations and analysis. No JOINs. No pain.
+---
 
-With full graph database functionality SurrealDB enables more advanced querying and analysis. Records (or vertices) can be connected to one another with edges, each with its own record properties and metadata. Simple extensions to traditional SQL queries allow for multi-table, multi-depth document retrieval, efficiently in the database, without the use of complicated JOINs and without bringing the data down to the client.
+## Point-in-time reads
 
-### Simple schema definition for frontend and backend development
+> This is an Ankerton fork addition. Upstream SurrealDB does not support point-in-time reads on RocksDB.
 
-With SurrealDB, specify your database and API schema in one place, and define column rules and constraints just once. Once a schema is defined, database access is automatically granted to the relevant users. No more custom API code, and no more GraphQL integration. Simple, flexible, and ready for production in minutes not months.
+When `versioned: true`, every committed write is stamped with a Hybrid Logical Clock (HLC) timestamp. All versions of each key are retained on disk. You can read the state of any key as it existed at any past timestamp.
 
-<p>
-	<img width="49%" src="./img/illustrations/browser-sync.jpg" />
-	<img width="49%" src="./img/illustrations/multiple-integrations.jpg" />
-</p>
+```rust
+use surrealdb_core::kvs::timestamp::HlcTimeStamp;
 
-### Connect and query directly from web-browsers and client devices
+// Write version 1
+let tx = ds.transaction(true, true).await?;
+tx.set(b"config".to_vec(), b"v1".to_vec()).await?;
+tx.commit().await?;
 
-Connect directly to SurrealDB from any end-user client device. Run SurrealQL queries directly within web-browsers, ensuring that users can only view or modify the data that they are allowed to access. Highly-performant WebSocket connections allow for efficient bi-directional queries, responses and notifications.
+// Capture a timestamp — this marks the "snapshot point"
+let snapshot = HlcTimeStamp::next().0;
 
-### Query the database with the tools you want
+// Write version 2
+let tx = ds.transaction(true, true).await?;
+tx.set(b"config".to_vec(), b"v2".to_vec()).await?;
+tx.commit().await?;
 
-Your data, your choice. SurrealDB is designed to be flexible to use, with support for SurrealQL, GraphQL (coming soon), CRUD support over REST, and JSON-RPC querying and modification over WebSockets. With direct-to-client connection with in-built permissions, SurrealDB speeds up the development process, and fits in seamlessly into any tech stack.
+// Read the latest version — returns "v2"
+let tx = ds.transaction(false, false).await?;
+let latest = tx.get(b"config".to_vec(), None).await?;
 
-<p>
-	<img width="49%" src="./img/illustrations/realtime-live-queries.jpg" />
-	<img width="49%" src="./img/illustrations/scale-up.jpg" />
-</p>
+// Read at the snapshot — returns "v1"
+let historical = tx.get(b"config".to_vec(), Some(snapshot)).await?;
+tx.cancel().await?;
+```
 
-### Realtime live queries and data changes direct to application
+`HlcTimeStamp::next().0` returns a `u64` that encodes wall-clock milliseconds in the upper 48 bits and a logical counter in the lower 16 bits. It is always monotonically increasing — safe to use across threads.
 
-SurrealDB keeps every client device in-sync with data modifications pushed in realtime to the clients, applications, end-user devices, and server-side libraries. Live SQL queries allow for advanced filtering of the changes to which a client subscribes, and efficient data formats, including DIFFing and PATCHing enable highly-performant web-based data syncing.
+**Version retention:** by default all versions are kept forever. Set `retention_ns` to allow the storage engine to discard versions older than the given duration:
 
-### Scale effortlessly to hundreds of nodes for high-availability and scalability
+```rust
+use std::time::Duration;
 
-SurrealDB can be run as a single in-memory node, or as part of a distributed cluster - offering highly-available and highly-scalable system characteristics. Designed from the ground up to run in a distributed environment, SurrealDB makes use of special techniques when handling multi-table transactions, and document record IDs - with no use of table or row locks.
+let config = RocksDbConfig {
+    versioned:    true,
+    retention_ns: Duration::from_secs(30 * 86400).as_nanos() as u64, // 30 days
+    ..RocksDbConfig::default()
+};
+```
 
-<p>
-	<img width="49%" src="./img/illustrations/database-plugins.jpg" />
-	<img width="49%" src="./img/illustrations/cloud-or-embedded.jpg" />
-</p>
+Or via the connection string: `rocksdb:///path?versioned=true&retention=30d`
 
-### Extend your database with JavaScript functions
+---
 
-Embedded JavaScript functions allow for advanced, custom functionality, with computation logic being moved to the data layer. This improves upon the traditional approach of moving data to the client devices before applying any computation logic, ensuring that only the necessary data is transferred remotely. These advanced JavaScript functions, with support for the ES2020 standard, allow any developer to analyse the data in ever more simple-yet-advanced ways.
+## Durability and sync modes
 
-### Designed to be embedded or to run distributed in the cloud
+Controls when committed writes are flushed to disk:
 
-Built entirely in Rust as a single library, SurrealDB is designed to be used as both an embedded database library with advanced querying functionality, and as a database server which can operate in a distributed cluster. With low memory usage and cpu requirements, the system requirements have been specifically thought through for running in all types of environment.
+| Mode | Meaning | Durability | Performance |
+|---|---|---|---|
+| `every` (default) | fsync after every commit | crash-safe | moderate |
+| `never` | let the OS decide | data loss possible on crash | fastest |
+| duration (e.g. `5s`) | background flush on interval | bounded loss window | high |
 
-<h2><img height="20" src="./img/community.svg">&nbsp;&nbsp;Community</h2>
+Set via query parameter:
 
-Join our growing community around the world, for help, ideas, and discussions regarding SurrealDB.
+```
+rocksdb:///path?sync=every
+rocksdb:///path?sync=never
+rocksdb:///path?sync=500ms
+```
 
-- View our official [Blog](https://surrealdb.com/blog)
-- Chat live with us on [Discord](https://surrealdb.com/discord)
-- Follow us on [X](https://x.com/surrealdb)
-- Connect with us on [LinkedIn](https://www.linkedin.com/company/surrealdb/)
-- Join the discussion on [Reddit](https://www.reddit.com/r/surrealdb/)
-- Visit us on [YouTube](https://www.youtube.com/@surrealdb)
-- Join our [Dev community](https://dev.to/surrealdb)
-- Questions tagged #surrealdb on [Stack Overflow](https://stackoverflow.com/questions/tagged/surrealdb)
+Or via `RocksDbConfig::sync_mode`:
 
-<h2><img height="20" src="./img/contributing.svg">&nbsp;&nbsp;Contributing</h2>
+```rust
+use surrealdb_core::kvs::config::SyncMode;
+use std::time::Duration;
 
-We would &nbsp;<img width="15" src="./img/love.svg">&nbsp; for you to get involved with SurrealDB development! If you wish to help, you can learn more about how you can contribute to this project in the [contribution guide](CONTRIBUTING.md).
+SyncMode::Every
+SyncMode::Never
+SyncMode::Interval(Duration::from_millis(500))
+```
 
-**For maintainers**: See the [release process documentation](doc/RELEASING.md) for information about performing releases.
+With `sync=every`, write throughput under concurrent load is maintained by a grouped commit coordinator: multiple transactions commit in parallel, and their WAL flushes are coalesced into a single `fsync`. Each writer still waits for that `fsync` to complete before its `commit()` returns, so full durability is preserved.
 
-<h2><img height="20" src="./img/security.svg">&nbsp;&nbsp;Security</h2>
+---
 
-For security issues, view our [vulnerability policy](https://github.com/surrealdb/surrealdb/security/policy), view our [Trust and Security page](https://surrealdb.com/legal/category/security), and kindly email us at [security@surrealdb.com](mailto:security@surrealdb.com) instead of posting a public issue on GitHub.
+## Connection string reference
 
-<h2><img height="20" src="./img/license.svg">&nbsp;&nbsp;License</h2>
+### RocksDB
 
-Source code for SurrealDB is variously licensed under a number of different licenses. A copy of each license can be found in [each repository](https://github.com/surrealdb).
+```
+rocksdb:///absolute/path?param=value&param=value
+```
 
-- Libraries and SDKs, each located in its own distinct repository, are released under either the [Apache License 2.0](https://github.com/surrealdb/license/blob/main/APL.txt) or [MIT License](https://github.com/surrealdb/license/blob/main/MIT.txt).
-- Certain core database components, each located in its own distinct repository, are released under the [Apache License 2.0](https://github.com/surrealdb/license/blob/main/APL.txt).
-- Core database code for SurrealDB, located in [this repository](https://github.com/surrealdb/surrealdb), is released under the [Business Source License 1.1](/LICENSE).
+| Parameter | Values | Default | Description |
+|---|---|---|---|
+| `versioned` | `true` / `false` | `false` | Enable point-in-time reads |
+| `sync` | `never` / `every` / duration | `every` | WAL flush mode |
+| `retention` | duration string | `0` (unlimited) | How long to keep old versions |
 
-For more information, see the [licensing information](https://github.com/surrealdb/license).
+### SurrealKV
+
+```
+surrealkv:///absolute/path?param=value
+```
+
+| Parameter | Values | Default | Description |
+|---|---|---|---|
+| `versioned` | `true` / `false` | `false` | Enable point-in-time reads |
+| `sync` | `never` / `every` / duration | `every` | WAL flush mode |
+| `retention` | duration string | `0` | How long to keep old versions |
+
+### In-memory
+
+```
+mem://                           # no persistence
+mem:///absolute/path?param=value # with persistence
+```
+
+| Parameter | Values | Default | Requires path |
+|---|---|---|---|
+| `versioned` | `true` / `false` | `false` | no |
+| `sync` | `never` / `every` / duration | `never` | yes |
+| `aol` | `never` / `sync` / `async` | `never` | yes |
+| `snapshot` | `never` / duration > 30s | `never` | yes |
+| `retention` | duration string | `0` | no |
+
+### Duration format
+
+`500us`, `200ms`, `5s`, `1m`, `2h`, `30d`
+
+---
+
+## Environment variables
+
+### Datastore defaults (all engines)
+
+| Variable | Default | Description |
+|---|---|---|
+| `SURREAL_DATASTORE_SYNC_DATA` | — | Override sync mode |
+| `SURREAL_DATASTORE_VERSIONED` | `false` | Enable versioning |
+| `SURREAL_DATASTORE_RETENTION` | `0` | Version retention duration |
+
+### RocksDB performance tuning
+
+| Variable | Default | Description |
+|---|---|---|
+| `SURREAL_ROCKSDB_THREAD_COUNT` | `#CPUs` | Flush and compaction threads |
+| `SURREAL_ROCKSDB_BLOCK_CACHE_SIZE` | ≈ ½ RAM | LRU block cache size |
+| `SURREAL_ROCKSDB_WRITE_BUFFER_SIZE` | dynamic | Memtable write buffer size |
+| `SURREAL_ROCKSDB_MAX_WRITE_BUFFER_NUMBER` | dynamic | Max memtable count |
+| `SURREAL_ROCKSDB_TARGET_FILE_SIZE_BASE` | `64 MiB` | L1 SST target size |
+| `SURREAL_ROCKSDB_ENABLE_BLOB_FILES` | `true` | Offload large values to blob files |
+| `SURREAL_ROCKSDB_MIN_BLOB_SIZE` | `4 KiB` | Minimum value size for blob offload |
+| `SURREAL_ROCKSDB_BLOB_FILE_SIZE` | `256 MiB` | Target blob file size |
+| `SURREAL_ROCKSDB_MAX_OPEN_FILES` | `1024` | Open file descriptor limit |
+| `SURREAL_ROCKSDB_COMPACTION_STYLE` | `level` | `level` or `universal` |
+| `SURREAL_ROCKSDB_STORAGE_LOG_LEVEL` | `warn` | RocksDB internal log verbosity |
+| `SURREAL_ROCKSDB_SST_MAX_ALLOWED_SPACE_USAGE` | `0` | Disk space cap (0 = unlimited) |
+
+### Grouped commit tuning (sync=every only)
+
+| Variable | Default | Description |
+|---|---|---|
+| `SURREAL_ROCKSDB_GROUPED_COMMIT_TIMEOUT` | `5ms` | Max time to wait for a batch to fill |
+| `SURREAL_ROCKSDB_GROUPED_COMMIT_WAIT_THRESHOLD` | `12` | Batch size that triggers wait |
+| `SURREAL_ROCKSDB_GROUPED_COMMIT_MAX_BATCH_SIZE` | `4096` | Hard ceiling on batch size |
