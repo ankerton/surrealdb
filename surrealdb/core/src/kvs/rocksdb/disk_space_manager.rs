@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicU8, Ordering};
 
-use rocksdb::{Env, Options, SstFileManager};
+use rocksdb::{Options, SstFileManager};
 
 use super::{TARGET, cnf};
 use crate::kvs::Result;
@@ -120,10 +120,8 @@ impl DiskSpaceManager {
 	pub(super) fn new(opts: &mut Options) -> Result<Self> {
 		// Get the maximum allowed space usage in bytes
 		let limit = *cnf::ROCKSDB_SST_MAX_ALLOWED_SPACE_USAGE;
-		// Create a new environment
-		let env = Env::new()?;
-		// Create a new SST file manager
-		let sst_file_manager = SstFileManager::new(&env)?;
+		// Create a new SST file manager (manages its own env internally)
+		let sst_file_manager = SstFileManager::new()?;
 		// Disable RocksDB's built-in hard limit (set to 0 = unlimited).
 		// This prevents RocksDB from blocking writes due to temporary size spikes from
 		// write buffering and pending compactions. Instead, the application manages space

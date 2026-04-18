@@ -239,6 +239,9 @@ pub struct RocksDbConfig {
 	pub retention_ns: u64,
 	/// Disk sync mode.
 	pub sync_mode: SyncMode,
+	/// AES-256 encryption key for RocksDB encryption at rest.
+	/// Supplied by app-crypto at startup; not configurable via query params.
+	pub encryption_key: Option<[u8; 32]>,
 }
 
 impl Default for RocksDbConfig {
@@ -247,6 +250,7 @@ impl Default for RocksDbConfig {
 			versioned: false,
 			retention_ns: 0,
 			sync_mode: SyncMode::Every,
+			encryption_key: None,
 		}
 	}
 }
