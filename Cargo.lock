@@ -4582,6 +4582,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 
 [[package]]
+name = "openssl-src"
+version = "300.6.0+3.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8e8cbfd3a4a8c8f089147fd7aaa33cf8c7450c4d09f8f80698a0cf093abeff4"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "openssl-sys"
 version = "0.9.111"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4589,6 +4598,7 @@ checksum = "82cab2d520aa75e3c58898289429321eb788c3106963d0dc886ec7a5f4adc321"
 dependencies = [
  "cc",
  "libc",
+ "openssl-src",
  "pkg-config",
  "vcpkg",
 ]
@@ -6942,7 +6952,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "surreal"
-version = "3.1.0-alpha"
+version = "3.1.0-ankerton.1"
 dependencies = [
  "assert_fs",
  "chrono",
@@ -6976,7 +6986,7 @@ dependencies = [
 
 [[package]]
 name = "surrealdb"
-version = "3.1.0-alpha"
+version = "3.1.0-ankerton.1"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -7032,7 +7042,7 @@ dependencies = [
 
 [[package]]
 name = "surrealdb-ast"
-version = "3.1.0-alpha"
+version = "3.1.0-ankerton.1"
 dependencies = [
  "chrono",
  "rust_decimal",
@@ -7042,14 +7052,14 @@ dependencies = [
 
 [[package]]
 name = "surrealdb-common"
-version = "3.1.0-alpha"
+version = "3.1.0-ankerton.1"
 dependencies = [
  "hashbrown 0.16.1",
 ]
 
 [[package]]
 name = "surrealdb-core"
-version = "3.1.0-alpha"
+version = "3.1.0-ankerton.1"
 dependencies = [
  "addr",
  "affinitypool",
@@ -7131,7 +7141,7 @@ dependencies = [
  "strsim",
  "subtle",
  "surrealdb-protocol",
- "surrealdb-rocksdb",
+ "surrealdb-rocksdb-ankerton",
  "surrealdb-tikv-client",
  "surrealdb-types",
  "surrealism-runtime",
@@ -7163,9 +7173,7 @@ dependencies = [
 
 [[package]]
 name = "surrealdb-librocksdb-sys"
-version = "0.18.1+11.0.0-2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c87fb5a0a71b9c48f5511132d117f08c2b97918c965b9a5c5ba859754af13cf6"
+version = "0.18.0+10.7.5"
 dependencies = [
  "bindgen",
  "bzip2-sys",
@@ -7173,12 +7181,13 @@ dependencies = [
  "libc",
  "libz-sys",
  "lz4-sys",
+ "openssl-sys",
  "zstd-sys",
 ]
 
 [[package]]
 name = "surrealdb-parser"
-version = "3.1.0-alpha"
+version = "3.1.0-ankerton.1"
 dependencies = [
  "bitflags 2.10.0",
  "chrono",
@@ -7194,7 +7203,7 @@ dependencies = [
 
 [[package]]
 name = "surrealdb-profiling"
-version = "3.1.0-alpha"
+version = "3.1.0-ankerton.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -7231,10 +7240,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "surrealdb-rocksdb"
-version = "0.24.0-surreal.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc16b80e46348dc188693328fe2a818b8f47457e40451364bd2ae73df7cb738e"
+name = "surrealdb-rocksdb-ankerton"
+version = "0.24.0-ankerton.1"
 dependencies = [
  "libc",
  "surrealdb-librocksdb-sys",
@@ -7242,7 +7249,7 @@ dependencies = [
 
 [[package]]
 name = "surrealdb-server"
-version = "3.1.0-alpha"
+version = "3.1.0-ankerton.1"
 dependencies = [
  "anyhow",
  "assert_fs",
@@ -7344,7 +7351,7 @@ dependencies = [
 
 [[package]]
 name = "surrealdb-token"
-version = "3.1.0-alpha"
+version = "3.1.0-ankerton.1"
 dependencies = [
  "logos",
  "surrealdb-common",
@@ -7352,7 +7359,7 @@ dependencies = [
 
 [[package]]
 name = "surrealdb-types"
-version = "3.1.0-alpha"
+version = "3.1.0-ankerton.1"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -7382,7 +7389,7 @@ dependencies = [
 
 [[package]]
 name = "surrealdb-types-derive"
-version = "3.1.0-alpha"
+version = "3.1.0-ankerton.1"
 dependencies = [
  "proc-macro2",
  "quote",

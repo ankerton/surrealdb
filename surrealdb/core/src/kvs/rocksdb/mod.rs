@@ -19,9 +19,9 @@ use disk_space_manager::{DiskSpaceManager, DiskSpaceState, TransactionState};
 use garbage_collector::GarbageCollector;
 use memory_manager::MemoryManager;
 use rocksdb::{
-	ColumnFamilyDescriptor, DBCompactionStyle, DBCompressionType, FlushOptions, LogLevel,
-	OptimisticTransactionDB, OptimisticTransactionOptions, Options, ReadOptions, WriteOptions,
-	properties,
+	ColumnFamilyDescriptor, DBCompactionStyle, DBCompressionType, EncryptedEnv, FlushOptions,
+	LogLevel, OptimisticTransactionDB, OptimisticTransactionOptions, Options, ReadOptions,
+	WriteOptions, properties,
 };
 use tokio::sync::Mutex;
 
@@ -251,6 +251,13 @@ impl Datastore {
 		} else {
 			None
 		};
+		// Enable encryption at rest if a key was supplied by app-crypto
+		if let Some(key) = config.encryption_key {
+			let enc_env = EncryptedEnv::new(key.to_vec())
+				.map_err(|e| Error::Datastore(format!("Failed to initialise RocksDB EncryptedEnv: {e}")))?;
+			opts.set_encrypted_env(enc_env);
+			info!(target: TARGET, "RocksDB encryption at rest enabled");
+		}
 		// Open the database, using an explicit "default" column family when
 		// versioning is enabled so that cf_handle("default") is available
 		// for the garbage collector to advance the full_history_ts_low watermark.
