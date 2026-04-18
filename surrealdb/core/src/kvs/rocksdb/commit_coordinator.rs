@@ -198,9 +198,22 @@ impl CommitCoordinator {
 
 	/// Shutdown the commit coordinator
 	pub fn shutdown(&self) -> Result<()> {
-		// Signal shutdown
-		self.shared.shutdown.store(true, Ordering::Release);
-		// Notify the batcher
+		// Set the shutdown flag while holding the buffer lock.
+		// This prevents a missed-notification race: if we stored shutdown=true and
+		// called notify_all() without holding the lock, the batcher thread could
+		// check shutdown=false, then call condvar.wait(), and never wake up because
+		// notify_all() was already fired before the thread started waiting.
+		// By holding the buffer lock during the store, we guarantee that either:
+		//   (a) the batcher is already in condvar.wait() (lock released), so our
+		//       notify_all() will reach it, or
+		//   (b) the batcher hasn't entered condvar.wait() yet (it holds or will
+		//       acquire the lock after us), so it will see shutdown=true before
+		//       calling wait() and will return immediately.
+		{
+			let _buffer = self.shared.buffer.lock();
+			self.shared.shutdown.store(true, Ordering::Release);
+		}
+		// Notify after releasing the lock so the batcher can run immediately
 		self.shared.condvar.notify_all();
 		// Wait for thread to finish
 		if let Some(handle) = self.handle.lock().take() {
@@ -208,6 +221,16 @@ impl CommitCoordinator {
 		}
 		// All good
 		Ok(())
+	}
+}
+
+impl Drop for CommitCoordinator {
+	fn drop(&mut self) {
+		// Signal the background thread to stop and wait for it to exit so that
+		// its Arc<OptimisticTransactionDB> clone is released. Without this the
+		// RocksDB file lock stays held even after the Datastore is dropped,
+		// which prevents re-opening the same path (e.g. in the reopen test).
+		let _ = self.shutdown();
 	}
 }
 
@@ -275,13 +298,20 @@ impl CommitBatcher {
 				let mut buffer = self.shared.buffer.lock();
 				// Wait for items or shutdown
 				loop {
+					// Check shutdown before blocking — this catches the case
+					// where shutdown() was called and the flag was set while we
+					// held the lock (or before we first acquired it).
+					if self.shared.shutdown.load(Ordering::Acquire) {
+						return;
+					}
 					// Check if we have work to do
 					if !buffer.is_empty() {
 						break;
 					}
-					// Wait for notification
+					// Wait for notification (atomically releases the lock)
 					self.shared.condvar.wait(&mut buffer);
-					// Check shutdown flag before continuing
+					// Check shutdown again after waking in case we were notified
+					// by shutdown() rather than by a new sync request.
 					if self.shared.shutdown.load(Ordering::Acquire) {
 						return;
 					}
@@ -302,6 +332,10 @@ impl CommitBatcher {
 				loop {
 					// Wait on condvar with timeout
 					let mut buffer = self.shared.buffer.lock();
+					// Exit cleanly on shutdown rather than waiting out the full timeout
+					if self.shared.shutdown.load(Ordering::Acquire) {
+						break;
+					}
 					// Get the current instant
 					let now = Instant::now();
 					// Calculate the remaining time

@@ -7,6 +7,8 @@ mod comparator;
 mod disk_space_manager;
 mod garbage_collector;
 mod memory_manager;
+#[cfg(test)]
+mod tests;
 
 use std::ops::Range;
 use std::pin::Pin;
@@ -416,7 +418,10 @@ impl Datastore {
 		ro.set_snapshot(&inner.snapshot());
 		ro.set_async_io(true);
 		ro.fill_cache(true);
-		// When versioned, default reads fetch the latest version
+		// When versioned, default reads fetch the latest version.
+		// u64::MAX means "no upper bound" — the UDT comparator sorts newer
+		// timestamps first (descending), so u64::MAX matches the very latest
+		// version of every key, which is what a snapshot read at HEAD should see.
 		if self.versioned {
 			ro.set_timestamp(u64::MAX.to_le_bytes().to_vec());
 		}
@@ -560,10 +565,16 @@ impl Transactable for Transaction {
 			.await
 			.take()
 			.ok_or_else(|| Error::Internal("expected a transaction".into()))?;
-		// When versioned, stamp all writes with the current HLC timestamp
+		// When versioned, stamp all writes with the current HLC timestamp.
+		// We use assign_commit_timestamp (WriteBatch::UpdateTimestamps) rather
+		// than set_commit_timestamp (Transaction::SetCommitTimestamp) because the
+		// latter is a no-op for OptimisticTransaction — only PessimisticTransaction
+		// overrides it. UpdateTimestamps replaces the dummy timestamp stubs in
+		// every key in the write batch with the actual HLC value, which satisfies
+		// RocksDB's UDT requirement before the write reaches the DB layer.
 		if self.versioned {
 			let ts = HlcTimeStamp::next();
-			inner.set_commit_timestamp(ts.0);
+			inner.assign_commit_timestamp(ts.0)?;
 		}
 		// Always commit the RocksDB transaction on the caller thread for parallel commits
 		inner.commit()?;
