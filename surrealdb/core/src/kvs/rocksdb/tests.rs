@@ -54,6 +54,43 @@ async fn open_plain(path: &str) -> Result<Datastore, crate::kvs::err::Error> {
 	Datastore::new(path, config).await
 }
 
+/// Open an encrypted + versioned datastore with a caller-supplied key (for the wrong-key case).
+async fn open_encrypted_with_key(
+	path: &str,
+	key: [u8; 32],
+) -> Result<Datastore, crate::kvs::err::Error> {
+	let config = RocksDbConfig {
+		versioned: true,
+		retention_ns: 0,
+		sync_mode: SyncMode::Every,
+		encryption_key: Some(key),
+	};
+	Datastore::new(path, config).await
+}
+
+/// True if `needle` appears verbatim in any file's raw bytes under `dir` (recursively).
+fn needle_present_on_disk(dir: &std::path::Path, needle: &[u8]) -> bool {
+	let mut stack = vec![dir.to_path_buf()];
+	while let Some(d) = stack.pop() {
+		let Ok(rd) = std::fs::read_dir(&d) else { continue };
+		for entry in rd.flatten() {
+			let p = entry.path();
+			match entry.file_type() {
+				Ok(ft) if ft.is_dir() => stack.push(p),
+				Ok(_) => {
+					if let Ok(bytes) = std::fs::read(&p)
+						&& bytes.windows(needle.len()).any(|w| w == needle)
+					{
+						return true;
+					}
+				}
+				Err(_) => {}
+			}
+		}
+	}
+	false
+}
+
 // ─── Test 1: Opens successfully ─────────────────────────────────────────────
 
 #[tokio::test]
@@ -162,6 +199,34 @@ async fn test_encrypted_data_unreadable_without_key() {
 			}
 		}
 	}
+
+	// (a) Wrong-key open: a DIFFERENT 32-byte key must not decrypt to the plaintext.
+	// Unauthenticated CTR yields silent garbage under a wrong key (rather than an error),
+	// so the value — if the store opens and returns one — must simply not be the plaintext.
+	const WRONG_KEY: [u8; 32] = [0x99u8; 32];
+	match open_encrypted_with_key(&path, WRONG_KEY).await {
+		Err(_) => { /* acceptable: refuses to open under the wrong key */ }
+		Ok(ds) => {
+			let tx = ds.transaction(false, false).await.unwrap();
+			let val = tx.get(b"secret".to_vec(), None).await;
+			tx.cancel().await.unwrap();
+			if let Ok(Some(v)) = val {
+				assert_ne!(
+					v.as_slice(),
+					b"plaintext".as_ref(),
+					"a wrong key must not decrypt encrypted data to the original plaintext"
+				);
+			}
+		}
+	}
+
+	// (b) On-disk plaintext absence: the known plaintext must not appear verbatim in any file
+	// under the store dir (SST/WAL/MANIFEST/...). This is the direct evidence that the data is
+	// genuinely encrypted at rest, not just gated behind a read path.
+	assert!(
+		!needle_present_on_disk(dir.path(), b"plaintext"),
+		"known plaintext must not appear verbatim in any on-disk file (encryption at rest)"
+	);
 }
 
 // ─── Test 5: Encryption + versioning do not interfere with each other ────────
