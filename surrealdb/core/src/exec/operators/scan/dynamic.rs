@@ -585,6 +585,9 @@ async fn resolve_table_scan_stream(
 			// No single-index candidates -- try multi-index union for OR conditions
 			analyzer
 				.try_or_union(resolved_cond.as_ref(), cfg.direction)
+				// Try an OR-group conjunct under an AND wrapper (safe: Union is
+				// consumed with the full WHERE re-applied above it)
+				.or_else(|| analyzer.try_conjunct_or_union(resolved_cond.as_ref(), cfg.direction))
 				// Try expanding IN operators into union of equality lookups
 				.or_else(|| analyzer.try_in_expansion(resolved_cond.as_ref(), cfg.direction))
 				// Try expanding CONTAINSALL/CONTAINSANY into union of equality lookups
@@ -596,7 +599,10 @@ async fn resolve_table_scan_stream(
 			// When the best single-index path is a full-range scan (ORDER BY
 			// only), prefer a multi-index union for OR conditions if available.
 			if path.is_full_range_scan() {
-				analyzer.try_or_union(resolved_cond.as_ref(), cfg.direction).or(Some(path))
+				analyzer
+					.try_or_union(resolved_cond.as_ref(), cfg.direction)
+					.or_else(|| analyzer.try_conjunct_or_union(resolved_cond.as_ref(), cfg.direction))
+					.or(Some(path))
 			} else {
 				Some(path)
 			}
