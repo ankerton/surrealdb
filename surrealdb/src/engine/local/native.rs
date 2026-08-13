@@ -146,7 +146,7 @@ pub(crate) async fn run_router(
 
 	let builder = builder.with_capabilities(address.config.capabilities);
 
-	#[cfg(storage)]
+	#[cfg(feature = "kv-rocksdb")]
 	let builder = if let Some(key) = address.config.encryption_key {
 		builder.with_encryption_key(key)
 	} else {
