@@ -95,9 +95,69 @@ impl<'a> IndexAnalyzer<'a> {
 			return None;
 		}
 
+		self.or_union_for_expr(&cond.0, direction)
+	}
+
+	/// Try to build a multi-index union access path for an OR condition that
+	/// appears as one conjunct of an AND tree.
+	///
+	/// `try_or_union` only helps when the OR is the root of the WHERE clause.
+	/// A query like `ty = 'x' AND (a MATCHES q1 OR b MATCHES q2)` has an
+	/// indexable OR-group buried under the AND wrapper: each OR branch can be
+	/// served by an index, and the surrounding conjuncts (which may not be
+	/// indexable at all) can be applied as a residual filter above the union.
+	///
+	/// Walks the AND conjuncts of the condition and returns a union path for
+	/// the first OR-group whose every branch has an index candidate. The union
+	/// over-approximates the full condition, so the caller MUST re-apply the
+	/// complete original WHERE clause above the union (`FilterAction::
+	/// UseOriginal` — which is how `AccessPath::Union` is already consumed).
+	pub fn try_conjunct_or_union(
+		&self,
+		cond: Option<&Cond>,
+		direction: ScanDirection,
+	) -> Option<AccessPath> {
+		let cond = cond?;
+
+		// Check for WITH NOINDEX
+		if matches!(self.with_hints, Some(With::NoIndex)) {
+			return None;
+		}
+
+		// Flatten the AND conjuncts. A single conjunct means the root is not
+		// an AND tree — that case is `try_or_union`'s, not ours.
+		let mut conjuncts = Vec::new();
+		Self::flatten_and(&cond.0, &mut conjuncts);
+		if conjuncts.len() < 2 {
+			return None;
+		}
+
+		// Try each OR-group conjunct; first fully-indexable one wins.
+		for conjunct in conjuncts {
+			if matches!(
+				conjunct,
+				Expr::Binary {
+					op: BinaryOperator::Or,
+					..
+				}
+			) && let Some(path) = self.or_union_for_expr(conjunct, direction)
+			{
+				return Some(path);
+			}
+		}
+		None
+	}
+
+	/// Build a union access path from the OR branches of `expr`.
+	///
+	/// For `A OR B OR C`, each branch is analyzed independently. If EVERY
+	/// branch has at least one index candidate, the best candidate from each
+	/// is combined into an `AccessPath::Union`. If any branch lacks an index
+	/// candidate, the union cannot be used and `None` is returned.
+	fn or_union_for_expr(&self, expr: &Expr, direction: ScanDirection) -> Option<AccessPath> {
 		// Flatten OR branches from the condition tree
 		let mut branches = Vec::new();
-		Self::flatten_or(&cond.0, &mut branches);
+		Self::flatten_or(expr, &mut branches);
 
 		// Need at least 2 branches for a union to make sense
 		if branches.len() < 2 {
@@ -397,6 +457,23 @@ impl<'a> IndexAnalyzer<'a> {
 			}
 			_ => {
 				branches.push(expr);
+			}
+		}
+	}
+
+	/// Flatten an AND tree into its conjuncts.
+	fn flatten_and<'b>(expr: &'b Expr, conjuncts: &mut Vec<&'b Expr>) {
+		match expr {
+			Expr::Binary {
+				left,
+				op: BinaryOperator::And,
+				right,
+			} => {
+				Self::flatten_and(left, conjuncts);
+				Self::flatten_and(right, conjuncts);
+			}
+			_ => {
+				conjuncts.push(expr);
 			}
 		}
 	}
@@ -1424,3 +1501,113 @@ fn normalize_range_op(op: &BinaryOperator, position: IdiomPosition) -> Option<Bi
 
 // literal_to_value and expr_to_value are imported from crate::exec::planner::util
 // as try_literal_to_value and try_expr_to_value.
+
+#[cfg(test)]
+mod tests {
+	use std::sync::Arc;
+
+	use super::*;
+	use crate::catalog::{FullTextParams, IndexId, Scoring};
+	use crate::val::TableName;
+
+	fn ft_index_on(col: &str) -> IndexDefinition {
+		IndexDefinition {
+			index_id: IndexId(1),
+			name: format!("ft_{col}"),
+			table_name: TableName::from("msg"),
+			cols: vec![crate::syn::idiom(col).unwrap().into()],
+			index: Index::FullText(FullTextParams {
+				analyzer: "az".to_string(),
+				highlight: false,
+				scoring: Scoring::Bm {
+					k1: 1.2,
+					b: 0.75,
+				},
+			}),
+			comment: None,
+			prepare_remove: false,
+		}
+	}
+
+	fn cond(sql: &str) -> Cond {
+		Cond(crate::syn::expr(sql).unwrap().into())
+	}
+
+	fn ft_analyzer_indexes(cols: &[&str]) -> Arc<[IndexDefinition]> {
+		cols.iter().map(|c| ft_index_on(c)).collect::<Vec<_>>().into()
+	}
+
+	#[test]
+	fn conjunct_or_union_under_and_wrapper() {
+		// The app-shaped query: un-indexable AND conjuncts wrapping an OR of
+		// two indexable MATCHES. try_or_union cannot help (root is AND);
+		// try_conjunct_or_union must produce a 2-branch union.
+		let indexes = ft_analyzer_indexes(&["text"]);
+		let analyzer = IndexAnalyzer::new(indexes, None);
+		let c = cond("ty = 'm' AND deleted = false AND (text @1@ 'aa' OR text @2@ 'bb')");
+
+		assert!(
+			analyzer.try_or_union(Some(&c), ScanDirection::Forward).is_none(),
+			"root-level OR union must not fire for an AND-rooted condition"
+		);
+
+		let path = analyzer
+			.try_conjunct_or_union(Some(&c), ScanDirection::Forward)
+			.expect("conjunct OR union should be found");
+		match path {
+			AccessPath::Union(branches) => {
+				assert_eq!(branches.len(), 2);
+				for b in &branches {
+					assert!(
+						matches!(b, AccessPath::FullTextSearch { .. }),
+						"expected FullTextSearch branch, got {b:?}"
+					);
+				}
+			}
+			other => panic!("expected Union, got {other:?}"),
+		}
+	}
+
+	#[test]
+	fn conjunct_or_union_rejects_unindexable_branch() {
+		// One OR branch has no index -> the union must not be used (falling
+		// back to a table scan is the only correct plan).
+		let indexes = ft_analyzer_indexes(&["text"]);
+		let analyzer = IndexAnalyzer::new(indexes, None);
+		let c = cond("ty = 'm' AND (text @1@ 'aa' OR other @2@ 'bb')");
+		assert!(analyzer.try_conjunct_or_union(Some(&c), ScanDirection::Forward).is_none());
+	}
+
+	#[test]
+	fn conjunct_or_union_requires_and_wrapper() {
+		// A root-level OR is try_or_union's case; the conjunct variant must
+		// decline so the two paths stay mutually exclusive.
+		let indexes = ft_analyzer_indexes(&["text"]);
+		let analyzer = IndexAnalyzer::new(indexes, None);
+		let c = cond("text @1@ 'aa' OR text @2@ 'bb'");
+		assert!(analyzer.try_conjunct_or_union(Some(&c), ScanDirection::Forward).is_none());
+		assert!(analyzer.try_or_union(Some(&c), ScanDirection::Forward).is_some());
+	}
+
+	#[test]
+	fn conjunct_or_union_respects_noindex_hint() {
+		let indexes = ft_analyzer_indexes(&["text"]);
+		let with = With::NoIndex;
+		let analyzer = IndexAnalyzer::new(indexes, Some(&with));
+		let c = cond("ty = 'm' AND (text @1@ 'aa' OR text @2@ 'bb')");
+		assert!(analyzer.try_conjunct_or_union(Some(&c), ScanDirection::Forward).is_none());
+	}
+
+	#[test]
+	fn conjunct_or_union_takes_first_indexable_or_group() {
+		// Two OR-group conjuncts: the first is not indexable, the second is.
+		// The second one must be found.
+		let indexes = ft_analyzer_indexes(&["text"]);
+		let analyzer = IndexAnalyzer::new(indexes, None);
+		let c = cond("(a = 1 OR b = 2) AND (text @1@ 'aa' OR text @2@ 'bb')");
+		let path = analyzer
+			.try_conjunct_or_union(Some(&c), ScanDirection::Forward)
+			.expect("second OR group should unionize");
+		assert!(matches!(path, AccessPath::Union(ref b) if b.len() == 2));
+	}
+}

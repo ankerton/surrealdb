@@ -2417,14 +2417,26 @@ impl<'ctx> Planner<'ctx> {
 			return Ok(Some((AccessPath::TableScan, direction)));
 		}
 
-		// Rewrite projection function calls (e.g. type::field("name")) →
-		// Idiom in a cloned condition so the index analyzer can match
-		// against indexed columns.
-		let rewritten_cond = cond.map(|c| {
-			let mut c = c.clone();
-			resolve_projection_field_idioms(&mut c, self.function_registry());
-			c
-		});
+		// Prepare an analysis-only copy of the condition, mirroring the
+		// DynamicScan runtime path (scan/dynamic.rs): resolve bind params to
+		// literals so parameterised predicates (`field @1@ $q`, `field = $v`)
+		// can produce index candidates, re-fold constants, and rewrite
+		// projection function calls (e.g. type::field("name")) → Idiom so the
+		// analyzer can match indexed columns. Safe at plan time: the planner
+		// runs per execution with this request's params, exactly like
+		// `resolve_source_exprs` does for FROM sources. The executed WHERE
+		// clause is untouched.
+		let rewritten_cond = match cond {
+			Some(c) => {
+				let ns_db = Some((ns_def.namespace_id, db_def.database_id));
+				let mut c =
+					resolve_condition_params(c, self.ctx, ns_db, SELECT_ITERATION_PARAMS).await;
+				fold_condition_expressions(&mut c, self.function_registry());
+				resolve_projection_field_idioms(&mut c, self.function_registry());
+				Some(c)
+			}
+			None => None,
+		};
 		let analysis_cond = rewritten_cond.as_ref();
 
 		let analyzer = IndexAnalyzer::new(indexes, with);
@@ -2432,6 +2444,13 @@ impl<'ctx> Planner<'ctx> {
 
 		if candidates.is_empty() {
 			if let Some(path) = analyzer.try_or_union(analysis_cond, direction) {
+				return Ok(Some((path, direction)));
+			}
+			// Try an OR-group conjunct under an AND wrapper, e.g.
+			// `ty = 'x' AND (a @1@ 'q1' OR b @2@ 'q2')`. The union
+			// over-approximates, which is safe because AccessPath::Union is
+			// consumed with FilterAction::UseOriginal (full WHERE re-applied).
+			if let Some(path) = analyzer.try_conjunct_or_union(analysis_cond, direction) {
 				return Ok(Some((path, direction)));
 			}
 			// Try expanding IN operators into union of equality lookups
@@ -2461,7 +2480,9 @@ impl<'ctx> Planner<'ctx> {
 		// in the index. The outer pipeline adds a Sort when the union
 		// does not satisfy ORDER BY.
 		if path.is_full_range_scan()
-			&& let Some(union_path) = analyzer.try_or_union(analysis_cond, direction)
+			&& let Some(union_path) = analyzer
+				.try_or_union(analysis_cond, direction)
+				.or_else(|| analyzer.try_conjunct_or_union(analysis_cond, direction))
 		{
 			return Ok(Some((union_path, direction)));
 		}
