@@ -10,13 +10,16 @@ The Ankerton fork of SurrealDB. Adds AES-256 encryption at rest (RocksDB Encrypt
 |---------|----------|-----------|
 | Encryption at rest | No | AES-256 via RocksDB EncryptionProvider |
 | MVCC versioning | No | `versioned=true` URL param — HLC-timestamped writes, point-in-time reads |
-| Revision | `c52649c29` | Fixed — do not update without testing |
+| Full-text planner: OR-of-MATCHES under an AND wrapper | Table scan + per-row MATCHES (O(table)) | Union of FullTextScans, O(matches) — PR #5 |
+| Plan-time index analysis of bound params (`field @1@ $q`) | No candidates (table scan) | Params resolved per execution — PR #5 |
+| kv-mem-only builds (`--no-default-features --features kv-mem`) | n/a | Compile fixed (encryption call gated on `kv-rocksdb`) — PR #4 |
+| Revision | `ce78f485d` | Fixed — do not update without testing |
 
 ## How to reference
 
 ```toml
 # In workspace Cargo.toml
-surrealdb = { git = "https://github.com/ankerton/surrealdb", rev = "c52649c29", features = ["kv-rocksdb", "kv-mem"] }
+surrealdb = { git = "https://github.com/ankerton/surrealdb", rev = "ce78f485d", features = ["kv-rocksdb", "kv-mem"] }
 
 [patch."https://github.com/ankerton/surrealdb"]
 surrealdb = { path = "../../forge/surrealdb/surrealdb" }

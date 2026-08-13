@@ -9,7 +9,7 @@ This is the Ankerton fork of SurrealDB. It adds two capabilities to the **RocksD
 
 If your application stores sensitive data and requires data-at-rest protection, RocksDB with encryption enabled is the only storage engine in this fork that provides it.
 
-Everything else — SurrealQL, graph traversal, vector search, full-text search, multi-tenancy, live queries, the server, the Rust SDK — is unchanged from upstream SurrealDB.
+Everything else — SurrealQL, graph traversal, vector search, multi-tenancy, live queries, the server, the Rust SDK — is unchanged from upstream SurrealDB. Full-text search behaves identically but plans better: this fork's query planner serves OR-of-MATCHES conditions under an AND wrapper from an index union (and resolves bound `$param` search terms at plan time) instead of falling back to a table scan.
 
 ---
 
