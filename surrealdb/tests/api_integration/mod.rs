@@ -557,6 +557,57 @@ mod rocksdb {
 		}
 	}
 
+	/// Bytes in the write-ahead log files of the datastore at `path`: what an open replays.
+	fn wal_bytes(path: &std::path::Path) -> u64 {
+		std::fs::read_dir(path)
+			.unwrap()
+			.flatten()
+			.filter(|e| e.file_name().to_string_lossy().ends_with(".log"))
+			.map(|e| e.metadata().unwrap().len())
+			.sum()
+	}
+
+	#[test_log::test(tokio::test)]
+	async fn close_flushes_and_lets_go_of_the_datastore() {
+		let path = TEMP_DIR.join(Ulid::new().to_string());
+		let db = Surreal::new::<RocksDb>(path.clone())
+			.versioned()
+			.write_buffer_size(4 << 20)
+			.max_write_buffer_number(2)
+			.max_total_wal_size(16 << 20)
+			.block_cache_size(8 << 20)
+			.await
+			.unwrap();
+		db.use_ns("test").use_db("test").await.unwrap();
+		// An index, too: its building used to keep the datastore alive after shutdown
+		db.query("DEFINE INDEX item_n ON item FIELDS n").await.unwrap().check().unwrap();
+		db.query("FOR $n IN 0..500 { CREATE item SET n = $n, pad = string::repeat('x', 512) }")
+			.await
+			.unwrap()
+			.check()
+			.unwrap();
+		assert!(wal_bytes(&path) > 64 * 1024, "the writes are in the log");
+		let other = db.clone();
+		db.close().await.unwrap();
+		db.close().await.unwrap();
+		assert!(
+			other.query("SELECT * FROM item").await.is_err(),
+			"a closed connection takes no more requests"
+		);
+		assert!(
+			wal_bytes(&path) < 64 * 1024,
+			"the close flushed the log into data files: {} bytes left to replay",
+			wal_bytes(&path)
+		);
+		// Let go of: the same path opens again in this process, with everything written
+		let db = Surreal::new::<RocksDb>(path.clone()).versioned().await.unwrap();
+		db.use_ns("test").use_db("test").await.unwrap();
+		let n: Option<i64> =
+			db.query("RETURN count(SELECT * FROM item)").await.unwrap().take(0).unwrap();
+		assert_eq!(n, Some(500));
+		db.close().await.unwrap();
+	}
+
 	include_tests!(new_db => basic, serialisation, live, backup, session_isolation, run);
 }
 

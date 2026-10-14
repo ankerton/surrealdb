@@ -62,6 +62,79 @@ impl<R> Connect<Db, R> {
 		self
 	}
 
+	/// Set how many bytes a memtable (write buffer) of this datastore fills before it is
+	/// flushed to a data file. Without it, the process-wide default applies
+	/// (`SURREAL_ROCKSDB_WRITE_BUFFER_SIZE`, else sized from the system's memory: 128 MiB on a
+	/// machine with 16 GiB or more).
+	///
+	/// Supported by the `RocksDb` engine. With the write-buffer number and the WAL cap below, it
+	/// sizes an embedded datastore for an application rather than a server.
+	///
+	/// # Examples
+	///
+	/// ```no_run
+	/// # #[tokio::main]
+	/// # async fn main() -> surrealdb::Result<()> {
+	/// use surrealdb::Surreal;
+	/// use surrealdb::engine::local::RocksDb;
+	///
+	/// let db = Surreal::new::<RocksDb>("path/to/database-folder")
+	///     .write_buffer_size(16 << 20)
+	///     .max_write_buffer_number(2)
+	///     .max_total_wal_size(64 << 20)
+	///     .block_cache_size(64 << 20)
+	///     .await?;
+	/// # Ok(())
+	/// # }
+	/// ```
+	pub fn write_buffer_size(mut self, bytes: usize) -> Self {
+		self.address = self.address.map(|mut endpoint| {
+			endpoint.append_query_param("write_buffer_size", &bytes.to_string());
+			endpoint
+		});
+		self
+	}
+
+	/// Set how many memtables of this datastore may exist at once, the one being written
+	/// included. Without it, the process-wide default applies
+	/// (`SURREAL_ROCKSDB_MAX_WRITE_BUFFER_NUMBER`, else 2 to 32 by the system's memory).
+	///
+	/// Supported by the `RocksDb` engine.
+	pub fn max_write_buffer_number(mut self, count: usize) -> Self {
+		self.address = self.address.map(|mut endpoint| {
+			endpoint.append_query_param("max_write_buffer_number", &count.to_string());
+			endpoint
+		});
+		self
+	}
+
+	/// Cap this datastore's live write-ahead log: once its files together pass `bytes`, the
+	/// memtables holding the oldest of it are flushed so it can be dropped. That bounds what an
+	/// unclean exit leaves for the next open to replay. Zero lets RocksDB choose (four times the
+	/// write buffers), as it does without this.
+	///
+	/// Supported by the `RocksDb` engine.
+	pub fn max_total_wal_size(mut self, bytes: u64) -> Self {
+		self.address = self.address.map(|mut endpoint| {
+			endpoint.append_query_param("max_total_wal_size", &bytes.to_string());
+			endpoint
+		});
+		self
+	}
+
+	/// Set the size in bytes of this datastore's block cache, which its write buffers are also
+	/// charged to. Without it, the process-wide default applies
+	/// (`SURREAL_ROCKSDB_BLOCK_CACHE_SIZE`, else half the system's memory less 1 GiB).
+	///
+	/// Supported by the `RocksDb` engine.
+	pub fn block_cache_size(mut self, bytes: usize) -> Self {
+		self.address = self.address.map(|mut endpoint| {
+			endpoint.append_query_param("block_cache_size", &bytes.to_string());
+			endpoint
+		});
+		self
+	}
+
 	/// Set the disk sync mode.
 	///
 	/// Controls how and when data is flushed to disk. Supported by `SurrealKv`,

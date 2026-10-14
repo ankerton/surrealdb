@@ -48,6 +48,7 @@ impl conn::Sealed for Db {
 
 			let waiter = watch::channel(Some(WaitFor::Connection));
 			let router = Router {
+				closer: None,
 				features,
 				config,
 				sender: route_tx,

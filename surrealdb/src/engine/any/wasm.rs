@@ -178,6 +178,7 @@ impl conn::Sealed for Any {
 
 			let waiter = watch::channel(Some(WaitFor::Connection));
 			let router = Router {
+				closer: None,
 				features,
 				config,
 				sender: route_tx,

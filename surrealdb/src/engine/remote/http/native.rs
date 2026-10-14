@@ -118,6 +118,7 @@ impl conn::Sealed for Client {
 
 			let waiter = watch::channel(Some(WaitFor::Connection));
 			let router = Router {
+				closer: None,
 				features,
 				config,
 				sender: route_tx,

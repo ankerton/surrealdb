@@ -242,6 +242,34 @@ pub struct RocksDbConfig {
 	/// AES-256 encryption key for RocksDB encryption at rest.
 	/// Supplied by app-crypto at startup; not configurable via query params.
 	pub encryption_key: Option<[u8; 32]>,
+	/// How this datastore is sized. Every field left `None` keeps the process-wide value (the
+	/// `SURREAL_ROCKSDB_*` environment variables, else sized from the system's memory), which is
+	/// what every datastore had before these could be set per datastore.
+	pub sizing: RocksDbSizing,
+}
+
+/// The sizing of one RocksDB datastore: its memory and its write-ahead log.
+///
+/// The process-wide defaults size a server: on a machine with 16-64 GiB they give each
+/// datastore 8 write buffers of 128 MiB and a block cache of half the memory less 1 GiB. An
+/// application embedding several small datastores wants each far smaller, and wants the log
+/// an unclean exit leaves behind bounded: RocksDB replays the whole of it on the next open.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RocksDbSizing {
+	/// Bytes a memtable (write buffer) fills before it is switched out and flushed to a data
+	/// file. Query parameter `write_buffer_size` (bytes, or with a `kb`/`mb`/`gb` suffix).
+	pub write_buffer_size: Option<usize>,
+	/// How many memtables may exist at once, the one being written included. Query parameter
+	/// `max_write_buffer_number`.
+	pub max_write_buffer_number: Option<usize>,
+	/// Once the write-ahead log files together pass this many bytes, the memtables holding the
+	/// oldest of it are flushed so it can be dropped: the most an unclean exit leaves to replay.
+	/// `0` lets RocksDB choose (four times the write buffers). Query parameter
+	/// `max_total_wal_size`.
+	pub max_total_wal_size: Option<u64>,
+	/// Bytes of the block cache (which the write buffers are also charged to). Query parameter
+	/// `block_cache_size`.
+	pub block_cache_size: Option<usize>,
 }
 
 impl Default for RocksDbConfig {
@@ -251,8 +279,31 @@ impl Default for RocksDbConfig {
 			retention_ns: 0,
 			sync_mode: SyncMode::Every,
 			encryption_key: None,
+			sizing: RocksDbSizing::default(),
 		}
 	}
+}
+
+/// A byte size from a query parameter: absent is `None`; zero is refused unless `zero_ok`.
+fn parse_size_param<T: TryFrom<u128>>(
+	params: &HashMap<String, String>,
+	key: &str,
+	zero_ok: bool,
+) -> Result<Option<T>> {
+	use crate::str::ParseBytes;
+	let Some(v) = params.get(key) else {
+		return Ok(None);
+	};
+	let invalid = |why: &str| {
+		Error::Datastore(format!(
+			"Invalid {key}: '{v}' ({why}). Expected a number of bytes, optionally with a kb, mb or gb suffix (e.g. '16mb')"
+		))
+	};
+	let n: u128 = v.as_str().parse_bytes::<u128>().map_err(invalid)?;
+	if n == 0 && !zero_ok {
+		return Err(invalid("must not be zero"));
+	}
+	T::try_from(n).map(Some).map_err(|_| invalid("too large"))
 }
 
 impl RocksDbConfig {
@@ -281,6 +332,23 @@ impl RocksDbConfig {
 		} else if let Some(v) = SURREAL_DATASTORE_SYNC_DATA.as_deref() {
 			config.sync_mode = parse_sync_mode(v)?;
 		}
+		// Size this datastore (query param > the process-wide default)
+		config.sizing = RocksDbSizing {
+			write_buffer_size: parse_size_param(params, "write_buffer_size", false)?,
+			max_write_buffer_number: match params.get("max_write_buffer_number") {
+				None => None,
+				Some(v) => match v.trim().parse::<usize>() {
+					Ok(n) if n >= 1 => Some(n),
+					_ => {
+						return Err(Error::Datastore(format!(
+							"Invalid max_write_buffer_number: '{v}'. Expected a whole number of at least 1"
+						)));
+					}
+				},
+			},
+			max_total_wal_size: parse_size_param(params, "max_total_wal_size", true)?,
+			block_cache_size: parse_size_param(params, "block_cache_size", false)?,
+		};
 		// Return the configuration
 		Ok(config)
 	}
@@ -641,6 +709,49 @@ mod tests {
 	fn test_rocksdb_config_sync_invalid() {
 		let params = parse_query_params("sync=invalid");
 		assert!(RocksDbConfig::from_params(&params).is_err());
+	}
+
+	#[test]
+	fn test_rocksdb_config_sizing_defaults_to_the_process_wide_values() {
+		let config = RocksDbConfig::from_params(&HashMap::new()).unwrap();
+		assert_eq!(config.sizing, RocksDbSizing::default());
+		assert_eq!(config.sizing.write_buffer_size, None);
+		assert_eq!(config.sizing.max_write_buffer_number, None);
+		assert_eq!(config.sizing.max_total_wal_size, None);
+		assert_eq!(config.sizing.block_cache_size, None);
+	}
+
+	#[test]
+	fn test_rocksdb_config_sizing_params() {
+		let params = parse_query_params(
+			"versioned=true&write_buffer_size=16mb&max_write_buffer_number=2&max_total_wal_size=64MiB&block_cache_size=67108864",
+		);
+		let config = RocksDbConfig::from_params(&params).unwrap();
+		assert!(config.versioned);
+		assert_eq!(config.sizing.write_buffer_size, Some(16 * 1024 * 1024));
+		assert_eq!(config.sizing.max_write_buffer_number, Some(2));
+		assert_eq!(config.sizing.max_total_wal_size, Some(64 * 1024 * 1024));
+		assert_eq!(config.sizing.block_cache_size, Some(64 * 1024 * 1024));
+		// Each may be given alone; the others keep the process-wide value
+		let config =
+			RocksDbConfig::from_params(&parse_query_params("max_total_wal_size=0")).unwrap();
+		assert_eq!(config.sizing.max_total_wal_size, Some(0), "zero lets RocksDB choose");
+		assert_eq!(config.sizing.write_buffer_size, None);
+	}
+
+	#[test]
+	fn test_rocksdb_config_sizing_invalid() {
+		for bad in [
+			"write_buffer_size=0",
+			"write_buffer_size=lots",
+			"write_buffer_size=16tb",
+			"max_write_buffer_number=0",
+			"max_write_buffer_number=two",
+			"block_cache_size=0",
+			"max_total_wal_size=-1",
+		] {
+			assert!(RocksDbConfig::from_params(&parse_query_params(bad)).is_err(), "{bad}");
+		}
 	}
 
 	#[test]

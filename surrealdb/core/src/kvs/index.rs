@@ -263,6 +263,20 @@ impl IndexBuilder {
 		}
 	}
 
+	/// Stop every index building and let go of them all, at datastore shutdown.
+	///
+	/// A building keeps a context, and that context keeps this builder: the map and the
+	/// buildings in it hold each other — and with them the transaction factory, and with that
+	/// the storage engine — for as long as nothing breaks the cycle. Without this, a datastore
+	/// that ever defined an index is never dropped, and an embedded RocksDB keeps its files and
+	/// its lock until the process ends.
+	pub(crate) async fn shutdown(&self) {
+		let buildings = std::mem::take(&mut *self.indexes.write().await);
+		for building in buildings.values() {
+			building.abort();
+		}
+	}
+
 	pub(crate) async fn remove_index(
 		&self,
 		ns: NamespaceId,
