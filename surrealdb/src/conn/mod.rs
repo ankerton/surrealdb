@@ -37,6 +37,19 @@ pub struct Router {
 	#[allow(dead_code)]
 	pub(crate) config: Config,
 	pub(crate) features: HashSet<ExtraFeatures>,
+	/// How an embedded connection is closed and its end waited for; `None` for the others.
+	#[allow(dead_code)]
+	pub(crate) closer: Option<Closer>,
+}
+
+/// How an embedded connection is closed, and its end waited for (`Surreal::<Db>::close`).
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub(crate) struct Closer {
+	/// Asks the connection's router to stop taking requests and close its datastore.
+	pub(crate) request: tokio_util::sync::CancellationToken,
+	/// Set once the datastore is closed and let go of: how its shutdown went.
+	pub(crate) done: tokio::sync::watch::Receiver<Option<std::result::Result<(), String>>>,
 }
 
 impl Router {

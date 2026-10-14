@@ -156,6 +156,7 @@ impl conn::Sealed for super::Client {
 
 			let waiter = watch::channel(Some(WaitFor::Connection));
 			let router = Router {
+				closer: None,
 				features,
 				config,
 				sender: route_tx,

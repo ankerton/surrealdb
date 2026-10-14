@@ -29,7 +29,7 @@ use temp_dir::TempDir;
 
 use super::Datastore;
 use crate::kvs::api::Transactable;
-use crate::kvs::config::{RocksDbConfig, SyncMode};
+use crate::kvs::config::{RocksDbConfig, RocksDbSizing, SyncMode};
 use crate::kvs::timestamp::HlcTimeStamp;
 
 /// A fixed 32-byte AES-256 test key. Never use in production.
@@ -44,6 +44,7 @@ async fn open_encrypted_versioned(path: &str) -> Datastore {
 		retention_ns: 0,
 		sync_mode: SyncMode::Every,
 		encryption_key: Some(TEST_KEY),
+		sizing: RocksDbSizing::default(),
 	};
 	Datastore::new(path, config).await.expect("failed to open encrypted+versioned datastore")
 }
@@ -64,6 +65,7 @@ async fn open_encrypted_with_key(
 		retention_ns: 0,
 		sync_mode: SyncMode::Every,
 		encryption_key: Some(key),
+		sizing: RocksDbSizing::default(),
 	};
 	Datastore::new(path, config).await
 }
@@ -72,7 +74,9 @@ async fn open_encrypted_with_key(
 fn needle_present_on_disk(dir: &std::path::Path, needle: &[u8]) -> bool {
 	let mut stack = vec![dir.to_path_buf()];
 	while let Some(d) = stack.pop() {
-		let Ok(rd) = std::fs::read_dir(&d) else { continue };
+		let Ok(rd) = std::fs::read_dir(&d) else {
+			continue;
+		};
 		for entry in rd.flatten() {
 			let p = entry.path();
 			match entry.file_type() {
@@ -298,5 +302,122 @@ async fn test_encrypted_versioned_persists_across_reopen() {
 		let val = tx.get(b"persist".to_vec(), None).await.unwrap();
 		tx.cancel().await.unwrap();
 		assert_eq!(val.as_deref(), Some(b"yes".as_ref()), "data must persist across reopen");
+	}
+}
+
+// ─── Test 7: Shutdown flushes — the next open has nothing to replay ─────────
+
+/// Bytes in the files under `dir` whose names end with one of `ends`.
+fn bytes_in(dir: &std::path::Path, ends: &[&str]) -> u64 {
+	std::fs::read_dir(dir)
+		.unwrap()
+		.flatten()
+		.filter(|e| ends.iter().any(|x| e.file_name().to_string_lossy().ends_with(x)))
+		.map(|e| e.metadata().unwrap().len())
+		.sum()
+}
+
+/// The write-ahead log files (`*.log`) under `dir`: what an open replays.
+fn wal_bytes(dir: &std::path::Path) -> u64 {
+	bytes_in(dir, &[".log"])
+}
+
+/// The data files (`*.sst`, and `*.blob` for values kept apart) under `dir`.
+fn data_bytes(dir: &std::path::Path) -> u64 {
+	bytes_in(dir, &[".sst", ".blob"])
+}
+
+/// Write `count` keys of `size` bytes, a hundred to a transaction.
+async fn write_keys(ds: &Datastore, count: usize, size: usize) {
+	for start in (0..count).step_by(100) {
+		let tx = ds.transaction(true, true).await.unwrap();
+		for i in start..(start + 100).min(count) {
+			tx.set(format!("key-{i:08}").into_bytes(), vec![(i % 251) as u8; size]).await.unwrap();
+		}
+		tx.commit().await.unwrap();
+	}
+}
+
+/// Read back key `i` as [`write_keys`] wrote it.
+async fn assert_key(ds: &Datastore, i: usize, size: usize) {
+	let tx = ds.transaction(false, false).await.unwrap();
+	let val = tx.get(format!("key-{i:08}").into_bytes(), None).await.unwrap();
+	tx.cancel().await.unwrap();
+	assert_eq!(val, Some(vec![(i % 251) as u8; size]), "key {i}");
+}
+
+#[tokio::test]
+async fn test_shutdown_flushes_so_reopen_has_nothing_to_replay() {
+	let dir = TempDir::new().unwrap();
+	let path = dir.path().to_string_lossy().to_string();
+	{
+		let ds = open_encrypted_versioned(&path).await;
+		write_keys(&ds, 2_000, 1024).await;
+		assert!(wal_bytes(dir.path()) > 1 << 20, "the writes are in the log");
+		assert_eq!(data_bytes(dir.path()), 0, "and none has reached a data file yet");
+		ds.shutdown().await.unwrap();
+		// Dropped after the shutdown: the database closes and its lock is released
+	}
+	assert!(data_bytes(dir.path()) > 1 << 20, "shutdown flushed the memtables to data files");
+	assert!(
+		wal_bytes(dir.path()) < 64 * 1024,
+		"and left nothing for the next open to replay: {} bytes of log",
+		wal_bytes(dir.path())
+	);
+	let ds = open_encrypted_versioned(&path).await;
+	for i in [0, 999, 1_999] {
+		assert_key(&ds, i, 1024).await;
+	}
+	ds.shutdown().await.unwrap();
+}
+
+// ─── Test 8: Per-datastore sizing bounds what an unclean exit leaves ────────
+
+async fn open_sized(path: &str, sizing: RocksDbSizing) -> Datastore {
+	let config = RocksDbConfig {
+		versioned: true,
+		retention_ns: 0,
+		sync_mode: SyncMode::Every,
+		encryption_key: Some(TEST_KEY),
+		sizing,
+	};
+	Datastore::new(path, config).await.expect("failed to open a sized datastore")
+}
+
+#[tokio::test]
+async fn test_sizing_bounds_the_write_ahead_log_an_unclean_exit_leaves() {
+	const MIB: usize = 1 << 20;
+	let small = RocksDbSizing {
+		write_buffer_size: Some(MIB),
+		max_write_buffer_number: Some(2),
+		max_total_wal_size: Some(2 * MIB as u64),
+		block_cache_size: Some(8 * MIB),
+	};
+	// Twelve megabytes written, then dropped without a shutdown — what a process that ends with
+	// the datastore open leaves behind
+	let sized = TempDir::new().unwrap();
+	let sized_path = sized.path().to_string_lossy().to_string();
+	{
+		let ds = open_sized(&sized_path, small).await;
+		write_keys(&ds, 12_000, 1024).await;
+	}
+	let left = wal_bytes(sized.path());
+	assert!(left <= 4 * MIB as u64, "the log stays within the cap and one buffer: {left} bytes");
+	assert!(data_bytes(sized.path()) > 4 * MIB as u64, "the rest reached data files");
+	// The same writes with the process-wide sizing leave the whole of them in the log
+	let unsized_dir = TempDir::new().unwrap();
+	let unsized_path = unsized_dir.path().to_string_lossy().to_string();
+	{
+		let ds = open_sized(&unsized_path, RocksDbSizing::default()).await;
+		write_keys(&ds, 12_000, 1024).await;
+	}
+	assert!(wal_bytes(unsized_dir.path()) > 10 * MIB as u64, "unsized, nothing was flushed");
+	// Both reopen with every key, the sized one with only the capped log to replay
+	for path in [&sized_path, &unsized_path] {
+		let ds = open_sized(path, small).await;
+		for i in [0, 5_000, 11_999] {
+			assert_key(&ds, i, 1024).await;
+		}
+		ds.shutdown().await.unwrap();
 	}
 }

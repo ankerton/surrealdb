@@ -932,9 +932,13 @@ impl Datastore {
 		// Output function invocation details to logs
 		trace!(target: TARGET, "Running datastore shutdown operations");
 		// Delete this datastore from the cluster
-		self.delete_node().await?;
-		// Run any storage engine shutdown tasks
-		self.transaction_factory.builder.shutdown().await
+		let deleted = self.delete_node().await;
+		// Stop the index builder and let go of its buildings, which hold it in turn
+		self.index_builder.shutdown().await;
+		// Run any storage engine shutdown tasks, whether or not the node was deleted: they are
+		// what make the data written so far durable and the next open quick
+		let shut = self.transaction_factory.builder.shutdown().await;
+		deleted.and(shut)
 	}
 
 	// --------------------------------------------------

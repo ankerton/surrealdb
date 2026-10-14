@@ -55,6 +55,7 @@ impl conn::Sealed for Client {
 			let mut features = HashSet::new();
 			features.insert(ExtraFeatures::Backup);
 			let router = Router {
+				closer: None,
 				features,
 				sender: route_tx,
 				config: address.config,

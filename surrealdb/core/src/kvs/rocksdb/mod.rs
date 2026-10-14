@@ -168,6 +168,12 @@ impl Datastore {
 		// Set the write-ahead-log size limit in MB
 		info!(target: TARGET, "Write-ahead-log file size limit: {}MB", *cnf::ROCKSDB_WAL_SIZE_LIMIT);
 		opts.set_wal_size_limit_mb(*cnf::ROCKSDB_WAL_SIZE_LIMIT);
+		// Bound the live write-ahead log of this datastore: past this, the memtables holding its
+		// oldest part are flushed so it can be dropped — the most an unclean exit leaves to replay
+		if let Some(size) = config.sizing.max_total_wal_size {
+			info!(target: TARGET, "Maximum total write-ahead-log size: {size}B");
+			opts.set_max_total_wal_size(size);
+		}
 		// Allow multiple writers to update memtables in parallel
 		info!(target: TARGET, "Allow concurrent memtable writes: true");
 		opts.set_allow_concurrent_memtable_write(true);
@@ -220,7 +226,7 @@ impl Datastore {
 			}
 		});
 		// Configure the timestamp-aware comparator for user-defined timestamps
-		let cf_opts = if config.versioned {
+		let mut cf_opts = if config.versioned {
 			info!(target: TARGET, "Enabling user-defined timestamps (versioning)");
 			let mut cf_opts = Options::default();
 			cf_opts.set_comparator_with_ts(
@@ -235,7 +241,11 @@ impl Datastore {
 			None
 		};
 		// Configure and create the memory manager
-		let memory_manager = Arc::new(MemoryManager::configure(&mut opts)?);
+		let memory_manager = Arc::new(MemoryManager::configure(&mut opts, &config.sizing)?);
+		// The versioned "default" family has options of its own: size it too
+		if let Some(cf_opts) = cf_opts.as_mut() {
+			memory_manager.configure_cf(cf_opts, &config.sizing);
+		}
 		// Pre-configure the disk space manager
 		let should_create_disk_space_manager = DiskSpaceManager::configure(&mut opts)?;
 		// Pre-configure WAL options based on the resolved sync mode
@@ -255,8 +265,9 @@ impl Datastore {
 		};
 		// Enable encryption at rest if a key was supplied by app-crypto
 		if let Some(key) = config.encryption_key {
-			let enc_env = EncryptedEnv::new(key.to_vec())
-				.map_err(|e| Error::Datastore(format!("Failed to initialise RocksDB EncryptedEnv: {e}")))?;
+			let enc_env = EncryptedEnv::new(key.to_vec()).map_err(|e| {
+				Error::Datastore(format!("Failed to initialise RocksDB EncryptedEnv: {e}"))
+			})?;
 			opts.set_encrypted_env(enc_env);
 			info!(target: TARGET, "RocksDB encryption at rest enabled");
 		}
@@ -383,6 +394,9 @@ impl Datastore {
 		if let Err(e) = self.db.flush_opt(&opts) {
 			error!("An error occurred flushing memtables to SST files: {e}");
 		}
+		// Stop compactions and flushes, waiting for any running one: the datastore is closed
+		// from here on, and the files it leaves are the ones it will open with
+		self.db.cancel_all_background_work(true);
 		// Shutdown the memory manager
 		self.memory_manager.shutdown()?;
 		// All good
