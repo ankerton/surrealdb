@@ -123,7 +123,10 @@ impl DiskSpaceManager {
 		// Get the maximum allowed space usage in bytes
 		let limit = config.sst_max_allowed_space_usage;
 		// Create a new environment
-		let env = Env::new().map_err(kvs_error)?;
+		let env = match &config.env {
+			Some(e) => e.0.clone(),
+			None => Env::new().map_err(kvs_error)?,
+		};
 		// Create a new SST file manager
 		let sst_file_manager = SstFileManager::new(&env).map_err(kvs_error)?;
 		// Disable RocksDB's built-in hard limit (set to 0 = unlimited).

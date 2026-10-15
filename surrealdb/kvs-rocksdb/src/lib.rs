@@ -24,7 +24,7 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::Duration;
 
 use background_flusher::BackgroundFlusher;
-pub use cnf::RocksDbConfig;
+pub use cnf::{RocksDbConfig, RocksDbEnv};
 use commit_coordinator::CommitCoordinator;
 use disk_space_manager::{DiskSpaceManager, DiskSpaceState, TransactionState};
 use garbage_collector::GarbageCollector;
@@ -369,6 +369,10 @@ impl Datastore {
 		surrealdb_kvs::threadpool::initialise();
 		// Configure custom options
 		let mut opts = Options::default();
+		// An embedder's Env (for example an encrypted one), when it supplied one
+		if let Some(env) = &config.env {
+			opts.set_env(&env.0);
+		}
 		// Ensure we use fdatasync
 		opts.set_use_fsync(false);
 		// Create database if missing

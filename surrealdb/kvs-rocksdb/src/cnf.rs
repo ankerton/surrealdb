@@ -322,6 +322,17 @@ fn default_runtime_worker_threads() -> usize {
 	std::cmp::max(4, num_cpus::get())
 }
 
+/// A RocksDB `Env` supplied by an embedder, for example an encrypted one. Its `Debug` prints
+/// nothing of it.
+#[derive(Clone)]
+pub struct RocksDbEnv(pub rocksdb::Env);
+
+impl std::fmt::Debug for RocksDbEnv {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.write_str("RocksDbEnv(..)")
+	}
+}
+
 /// Configuration for the RocksDB storage engine, parsed from query parameters.
 #[derive(Debug, Clone)]
 pub struct RocksDbConfig {
@@ -587,6 +598,10 @@ pub struct RocksDbConfig {
 	/// workloads
 	/// (default: `2`).
 	pub runtime_reserve: usize,
+	/// The RocksDB `Env` to open the database with (default: RocksDB's own). Not settable from
+	/// query parameters: an embedder sets it from its own `BackendProvider`, for example to an
+	/// `Env` from `rocksdb::encryption::create_encrypted_env`.
+	pub env: Option<RocksDbEnv>,
 }
 
 impl Default for RocksDbConfig {
@@ -649,6 +664,7 @@ impl Default for RocksDbConfig {
 			shutdown_wait_for_compact_seconds: default_shutdown_wait_for_compact_seconds(),
 			runtime_worker_threads: default_runtime_worker_threads(),
 			runtime_reserve: 2,
+			env: None,
 		}
 	}
 }
