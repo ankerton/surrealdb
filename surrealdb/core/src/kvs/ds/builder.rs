@@ -193,7 +193,13 @@ impl Builder {
 			.or_else(|| raw_path.split_once(':'))
 			.map(|(_, p)| p)
 			.unwrap_or(raw_path);
-		let normalised = format!("/{}", rocksdb_path.trim_start_matches('/'));
+		// SPIKE (Windows): a drive path (`D:\…` or `/D:\…`) must not get a leading `/`.
+		let trimmed = rocksdb_path.trim_start_matches('/');
+		let normalised = if cfg!(windows) && trimmed.as_bytes().get(1) == Some(&b':') {
+			trimmed.to_string()
+		} else {
+			format!("/{trimmed}")
+		};
 
 		// Build RocksDbConfig from query params, then inject the key
 		let mut config =
