@@ -1042,6 +1042,9 @@ impl Document {
 		self.initial = self.current.clone();
 		// Recalculating ComputedData, depending on the existing record.
 		self.input_data = None;
+		// The failed create attempt may already have memoized `is_modified` against an empty
+		// initial document; the update retry must compare against the existing record.
+		self.modified = OnceCell::new();
 	}
 
 	/// Retrieve the record id for this document
