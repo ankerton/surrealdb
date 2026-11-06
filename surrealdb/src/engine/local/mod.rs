@@ -455,7 +455,36 @@ struct SessionState {
 	session: RwLock<Session>,
 	vars: RwLock<Variables>,
 	transactions: HashMap<Uuid, Arc<Transaction>>,
+	/// Live-query notifications produced by writes inside each client-side transaction, held
+	/// until it commits (ankerton fork; upstream 3.3 does the same with `tx.on_commit`).
+	txn_notices: HashMap<Uuid, Arc<TxnNotices>>,
 	live_queries: HashMap<Uuid, Sender<crate::Result<Notification>>>,
+}
+
+/// The notifications a client-side transaction's writes produced, until it commits or cancels.
+struct TxnNotices {
+	send: Sender<surrealdb_types::Notification>,
+	recv: async_channel::Receiver<surrealdb_types::Notification>,
+}
+
+impl TxnNotices {
+	fn new() -> Arc<Self> {
+		let (send, recv) = async_channel::unbounded();
+		Arc::new(Self {
+			send,
+			recv,
+		})
+	}
+
+	/// Everything buffered so far. Only called after the transaction is gone, so nothing more
+	/// can arrive.
+	fn drain(&self) -> Vec<surrealdb_types::Notification> {
+		let mut out = Vec::new();
+		while let Ok(n) = self.recv.try_recv() {
+			out.push(n);
+		}
+		out
+	}
 }
 
 impl SessionState {
@@ -466,6 +495,7 @@ impl SessionState {
 			session: RwLock::new(session),
 			vars: RwLock::new(Variables::default()),
 			transactions: HashMap::new(),
+			txn_notices: HashMap::new(),
 			live_queries: HashMap::new(),
 		}
 	}
@@ -705,6 +735,7 @@ async fn router(
 				Ok(txn) => {
 					let id = Uuid::now_v7();
 					state.transactions.insert(id, Arc::new(txn));
+					state.txn_notices.insert(id, TxnNotices::new());
 					query_result.finish_with_result(Ok(Value::Uuid(id.into())))
 				}
 				Err(error) => {
@@ -731,6 +762,8 @@ async fn router(
 		} => {
 			if let Some(tx) = state.transactions.get(&txn) {
 				state.transactions.remove(&txn);
+				// A cancelled transaction's writes never happened: their notices are dropped.
+				state.txn_notices.remove(&txn);
 				tx.cancel().await.map_err(crate::std_error_to_types_error)?;
 			}
 			Ok(vec![QueryResultBuilder::instant_none()])
@@ -740,7 +773,13 @@ async fn router(
 		} => {
 			if let Some(tx) = state.transactions.get(&txn) {
 				state.transactions.remove(&txn);
+				let notices = state.txn_notices.get(&txn);
+				state.txn_notices.remove(&txn);
+				// Notices go out only once the writes are committed; a failed commit drops them.
 				tx.commit().await.map_err(crate::std_error_to_types_error)?;
+				if let Some(notices) = notices {
+					kvs.deliver_notifications(notices.drain()).await;
+				}
 			}
 			Ok(vec![QueryResultBuilder::instant_none()])
 		}
@@ -759,11 +798,12 @@ async fn router(
 				let tx_option = state.transactions.get(&txn_id);
 				if let Some(tx) = tx_option {
 					// Execute with the existing transaction
-					kvs.execute_with_transaction(
+					kvs.execute_with_transaction_notifying(
 						query.as_ref(),
 						&*state.session.read().await,
 						Some(vars),
 						tx,
+						state.txn_notices.get(&txn_id).map(|n| n.send.clone()),
 					)
 					.await?
 				} else {

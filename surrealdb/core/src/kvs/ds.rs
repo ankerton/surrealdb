@@ -1914,11 +1914,38 @@ impl Datastore {
 		vars: Option<PublicVariables>,
 		tx: Arc<Transaction>,
 	) -> std::result::Result<Vec<QueryResult>, TypesError> {
+		self.execute_with_transaction_notifying(txt, sess, vars, tx, None).await
+	}
+
+	/// As [`Self::execute_with_transaction`], with the live-query notifications its writes
+	/// produce sent to `notices` instead of being lost. The caller holds them until it commits
+	/// the transaction and then hands them to [`Self::deliver_notifications`]; on a cancel it
+	/// drops them. (ankerton fork: upstream fixed the same gap in 3.3 with `tx.on_commit`.)
+	pub async fn execute_with_transaction_notifying(
+		&self,
+		txt: &str,
+		sess: &Session,
+		vars: Option<PublicVariables>,
+		tx: Arc<Transaction>,
+		notices: Option<Sender<PublicNotification>>,
+	) -> std::result::Result<Vec<QueryResult>, TypesError> {
 		// Parse the SQL query text
 		let ast = syn::parse_with_capabilities(txt, &self.capabilities)
 			.map_err(|e| TypesError::validation(e.to_string(), None))?;
 		// Process the AST with the transaction
-		self.process_with_transaction(ast, sess, vars, tx).await
+		self.process_with_transaction_notifying(ast, sess, vars, tx, notices).await
+	}
+
+	/// Send notifications held back during a client-side transaction, after it committed, to
+	/// the live queries of this datastore (see [`Self::execute_with_transaction_notifying`]).
+	pub async fn deliver_notifications(&self, notices: impl IntoIterator<Item = PublicNotification>) {
+		if let Some(chn) = &self.notification_channel {
+			for n in notices {
+				if chn.send(n).await.is_err() {
+					break;
+				}
+			}
+		}
 	}
 
 	/// Process an AST with an existing transaction
@@ -1929,6 +1956,18 @@ impl Datastore {
 		sess: &Session,
 		vars: Option<PublicVariables>,
 		tx: Arc<Transaction>,
+	) -> std::result::Result<Vec<QueryResult>, TypesError> {
+		self.process_with_transaction_notifying(ast, sess, vars, tx, None).await
+	}
+
+	/// As [`Self::process_with_transaction`], with live-query notifications sent to `notices`.
+	pub async fn process_with_transaction_notifying(
+		&self,
+		ast: Ast,
+		sess: &Session,
+		vars: Option<PublicVariables>,
+		tx: Arc<Transaction>,
+		notices: Option<Sender<PublicNotification>>,
 	) -> std::result::Result<Vec<QueryResult>, TypesError> {
 		// Check if the session has expired
 		if sess.expired() {
@@ -1951,7 +1990,12 @@ impl Datastore {
 		}
 
 		// Create a new query options
-		let opt = self.setup_options(sess);
+		let mut opt = self.setup_options(sess);
+		// Writes in this transaction notify live queries through `notices`, held by the caller
+		// until the transaction commits.
+		if let Some(notices) = notices {
+			opt.broker = Some(crate::doc::DefaultBroker::new(notices));
+		}
 
 		// Create a default context
 		let mut ctx = self.setup_ctx().map_err(|e| {
